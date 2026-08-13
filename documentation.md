@@ -29,3 +29,21 @@ All engineering decisions, code changes, schema definitions, and benchmark test 
   * Staged and committed core project documents (`.gitignore`, `context.md`, `AGENTS.md`, `documentation.md`).
   * Repository is ready for remote tracking (`git remote add origin <URL>`).
 
+### [2026-08-13 15:07:30 IST] - Team B Core Codebase Implementation Complete
+* **Author**: Team B Lead Architect (AI Pair Developer)
+* **Action**: Built full production-ready FastAPI application & ArcadeDB multi-tenant client.
+* **Components Built**:
+  * `app/core/`: `config.py`, `security.py` (anti-Cypher injection & tenant verification), `telemetry.py` (side-by-side ms & $ cost tracker), `exceptions.py`.
+  * `app/models/`: Pydantic V2 schemas for Graph primitives (`Vertex`, `Edge`, `Subgraph`), API payloads (`RetrievalRequest/Response`, `IngestionRequest/Response`), and Tenant Schema (`TenantSchemaConfig`).
+  * `app/services/`:
+    * `arcadedb_client.py`: Async connection pool for ArcadeDB REST API & Cypher execution.
+    * `chunking_service.py`: Structure-aware semantic markdown chunker with parent-child hierarchy.
+    * `extraction_service.py`: Hybrid NER + Rule relation extractor.
+    * `resolution_service.py`: Entity Disambiguation algorithm via Jaro-Winkler string similarity ($\ge 0.85$) and canonical node merging.
+    * `retrieval_service.py`: Dual-path hybrid search (ArcadeDB HNSW vector KNN + multi-hop Cypher traversal + RRF reranker + defensive zero-result fallback).
+  * `app/api/v1/`: `retrieval.py` (`POST /api/v1/retrieval/search`), `ingestion.py` (`POST /api/v1/ingestion/document`), `tenant.py` (`POST /api/v1/tenant/create`, `GET /api/v1/tenant/schema`).
+  * `app/main.py`: Main FastAPI entry point with CORS, OpenAPI spec, and health check routes.
+  * `docker-compose.yml` & `Dockerfile`: Container configuration for ArcadeDB Community Edition & Team B API.
+  * `tests/`: Comprehensive test suite including unit tests, Cypher injection security tests, tenant isolation tests, and end-to-end telemetry benchmarks (`test_pipeline_benchmark.py`).
+
+

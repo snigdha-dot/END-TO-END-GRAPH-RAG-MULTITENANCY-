@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  arcadedb:
+    image: arcadedata/arcadedb:latest
+    container_name: team_b_arcadedb
+    environment:
+      - ARCADEDB_SERVER_ROOT_PASSWORD=playwithdata
+    ports:
+      - "2480:2480" # HTTP REST / Cypher API
+      - "2424:2424" # Binary protocol
+    volumes:
+      - arcadedb_data:/arcadedb/databases
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:2480/api/v1/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  retrieval_service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: team_b_retrieval_service
+    environment:
+      - ARCADEDB_URL=http://arcadedb:2480
+      - ARCADEDB_USER=root
+      - ARCADEDB_PASSWORD=playwithdata
+      - APP_PORT=8000
+    ports:
+      - "8000:8000"
+    depends_on:
+      arcadedb:
+        condition: service_healthy
+
+volumes:
+  arcadedb_data:
