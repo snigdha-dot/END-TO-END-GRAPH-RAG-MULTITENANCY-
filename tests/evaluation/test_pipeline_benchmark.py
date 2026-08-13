@@ -16,7 +16,7 @@ async def test_end_to_end_retrieval_side_by_side_telemetry():
     )
 
     print("\n" + "="*80)
-    print("📊 TEAM B SIDE-BY-SIDE RETRIEVAL TELEMETRY REPORT")
+    print("[TELEMETRY] TEAM B SIDE-BY-SIDE RETRIEVAL TELEMETRY REPORT")
     print("="*80)
     print(f"Tenant Target DB : tenant_{tenant_id}_kb")
     print(f"Search Query     : '{query}'")
