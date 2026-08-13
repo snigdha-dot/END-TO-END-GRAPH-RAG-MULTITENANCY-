@@ -1,59 +1,395 @@
-"""Hybrid Entity & Relationship Extraction Service."""
+"""Hybrid entity & relationship extraction (plan section 3, Step 2).
+
+Backends, in preference order:
+  * GLiNER  - zero-shot NER. Entity labels come from the tenant's schema at
+              inference time, so a movies KB extracts Film/Person/Studio while an
+              AI-trends KB extracts Model/Organization/Technique, with no retraining.
+  * spaCy   - faster, fixed label set, mapped onto the tenant schema.
+  * regex   - dependency-free fallback.
+
+Relations are extracted with schema-aware verb patterns built per tenant domain,
+plus a proximity heuristic for co-occurring entities.
+
+`LLMExtractionProvider` defines the interface the plan's LLM JSON-schema extractor
+will implement. `NullLLMProvider` is active in this FOSS-only build; wiring a real
+provider is a config change, not a refactor.
+"""
+from __future__ import annotations
+
+import logging
 import re
-from typing import List, Tuple
-from app.models.graph import Vertex, Edge, Triple
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Sequence, Tuple
+
+from app.core.config import settings
+from app.core.tenant_schema import TenantGraphSchema
+from app.models.graph import Edge, Vertex
+
+logger = logging.getLogger(__name__)
+
+
+# --------------------------------------------------------------------- LLM stub
+@dataclass
+class LLMExtractionResult:
+    vertices: List[Vertex]
+    edges: List[Edge]
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    model_name: str = "none"
+
+
+class LLMExtractionProvider(ABC):
+    """Interface for LLM JSON-schema extraction (plan section 3, Step 2)."""
+
+    @abstractmethod
+    async def extract(
+        self, text: str, chunk_id: str, schema: TenantGraphSchema
+    ) -> LLMExtractionResult: ...
+
+    @abstractmethod
+    async def disambiguate(
+        self, mention: str, candidates: List[Dict[str, Any]], context: str
+    ) -> Optional[str]: ...
+
+
+class NullLLMProvider(LLMExtractionProvider):
+    """No-op provider used when LLM_PROVIDER='none'. Keeps call sites uniform."""
+
+    async def extract(
+        self, text: str, chunk_id: str, schema: TenantGraphSchema
+    ) -> LLMExtractionResult:
+        return LLMExtractionResult(vertices=[], edges=[], model_name="none")
+
+    async def disambiguate(
+        self, mention: str, candidates: List[Dict[str, Any]], context: str
+    ) -> Optional[str]:
+        return None
+
+
+def get_llm_provider() -> LLMExtractionProvider:
+    """Resolve the configured LLM provider. Returns the null provider in FOSS mode."""
+    if settings.LLM_PROVIDER == "none" or not settings.LLM_API_KEY:
+        return NullLLMProvider()
+    logger.warning(
+        "LLM_PROVIDER=%s is configured but no concrete provider is implemented in this "
+        "build; using NullLLMProvider.", settings.LLM_PROVIDER,
+    )
+    return NullLLMProvider()
+
+
+# ------------------------------------------------------- domain relation patterns
+# (verb phrase -> edge type). Applied only when the tenant's schema permits the edge.
+_DOMAIN_RELATION_VERBS: Dict[str, List[Tuple[str, str]]] = {
+    "film": [
+        (r"directed(?:\s+by)?", "DIRECTED"),
+        (r"starred(?:\s+in)?|acted\s+in|appears?\s+in|stars", "ACTED_IN"),
+        (r"wrote|written\s+by|screenplay\s+by", "WROTE"),
+        (r"produced(?:\s+by)?", "PRODUCED"),
+        (r"composed(?:\s+the\s+score\s+for)?|scored", "COMPOSED_FOR"),
+        (r"distributed\s+by|released\s+by", "PRODUCED_BY"),
+        (r"won|received", "WON_AWARD"),
+        (r"nominated\s+for", "NOMINATED_FOR"),
+        (r"sequel\s+to|follows", "SEQUEL_OF"),
+        (r"played|portrayed", "PLAYED_CHARACTER"),
+    ],
+    "ai_research": [
+        (r"released\s+by|developed\s+by|created\s+by|introduced\s+by", "RELEASED_BY"),
+        (r"builds?\s+on|based\s+on|extends?|derived\s+from", "BUILDS_ON"),
+        (r"authored\s+by|written\s+by", "AUTHORED"),
+        (r"uses?|employs?|leverages?|applies", "USES_TECHNIQUE"),
+        (r"trained\s+on|pretrained\s+on|fine-?tuned\s+on", "TRAINED_ON"),
+        (r"evaluated\s+on|benchmarked\s+on|tested\s+on", "EVALUATED_ON"),
+        (r"outperforms?|beats|surpasses|exceeds", "OUTPERFORMS"),
+        (r"cites?|references?", "CITES"),
+        (r"supersedes?|replaces?|succeeded\s+by", "SUPERSEDES"),
+        (r"runs?\s+on|deployed\s+on", "RUNS_ON"),
+    ],
+    "generic": [
+        (r"depends?\s+on|requires?|relies\s+on", "DEPENDS_ON"),
+        (r"owns?", "OWNS"),
+        (r"manages?|maintains?", "MANAGES"),
+        (r"cites?|references?", "CITES"),
+        (r"contains?|includes?|has\s+part", "HAS_PART"),
+        (r"related\s+to|associated\s+with", "RELATED_TO"),
+    ],
+}
+
+# spaCy's fixed labels mapped onto domain schemas.
+_SPACY_LABEL_MAP: Dict[str, Dict[str, str]] = {
+    "film": {"PERSON": "Person", "ORG": "Studio", "WORK_OF_ART": "Film", "GPE": "Country"},
+    "ai_research": {"PERSON": "Person", "ORG": "Organization", "PRODUCT": "Model", "WORK_OF_ART": "Paper"},
+    "generic": {"PERSON": "Person", "ORG": "Organization", "PRODUCT": "Concept", "GPE": "Concept"},
+}
+
+_STOPWORD_TITLES = {
+    "the", "a", "an", "this", "that", "these", "those", "it", "its",
+    "introduction", "overview", "summary", "conclusion", "references", "contents",
+    "abstract", "background", "plot", "cast", "reception", "production", "notes",
+}
+
+
+def normalize_entity_name(name: str) -> str:
+    """Canonical form used for matching: lowercase, punctuation-stripped, underscored."""
+    cleaned = re.sub(r"[^\w\s-]", "", (name or "").strip().lower())
+    cleaned = re.sub(r"[\s-]+", "_", cleaned)
+    return cleaned.strip("_")
+
+
+def entity_id_for(name: str, label: str = "") -> str:
+    """Pre-resolution mention id.
+
+    Label-scoped so two entities of different types sharing a surface form stay
+    distinct all the way through resolution.
+    """
+    normalized = normalize_entity_name(name)
+    return f"canon_{label.lower()}_{normalized}" if label else f"canon_{normalized}"
+
 
 class ExtractionService:
-    def __init__(self):
-        # Explicit relationship patterns
-        self.patterns = [
-            (r'(\b[A-Z][a-zA-Z0-9_\s]{2,30}\b)\s+depends on\s+(\b[A-Z][a-zA-Z0-9_\s]{2,30}\b)', "DEPENDS_ON"),
-            (r'(\b[A-Z][a-zA-Z0-9_\s]{2,30}\b)\s+owns\s+(\b[A-Z][a-zA-Z0-9_\s]{2,30}\b)', "OWNS"),
-            (r'(\b[A-Z][a-zA-Z0-9_\s]{2,30}\b)\s+manages\s+(\b[A-Z][a-zA-Z0-9_\s]{2,30}\b)', "MANAGES"),
-            (r'(\b[A-Z][a-zA-Z0-9_\s]{2,30}\b)\s+uses\s+(\b[A-Z][a-zA-Z0-9_\s]{2,30}\b)', "DEPENDS_ON"),
-            (r'(\b[A-Z][a-zA-Z0-9_\s]{2,30}\b)\s+cites\s+(\b[A-Z][a-zA-Z0-9_\s]{2,30}\b)', "CITES"),
-        ]
+    """Extracts schema-conformant vertices and edges from chunk text."""
 
-    def extract_from_chunk(self, text: str, chunk_id: str) -> Tuple[List[Vertex], List[Edge]]:
-        """Extract vertices and edges from text chunk."""
-        vertices: List[Vertex] = []
-        edges: List[Edge] = []
-        seen_vertices = set()
+    def __init__(self) -> None:
+        self._gliner = None
+        self._spacy = None
+        self._backend_attempted = False
+        self._active_backend = "regex"
+        self._llm = get_llm_provider()
 
-        # 1. Extract pattern-based triples
-        for pattern, rel_type in self.patterns:
-            for match in re.finditer(pattern, text, re.IGNORECASE):
-                src_name = match.group(1).strip()
-                tgt_name = match.group(2).strip()
+    # ------------------------------------------------------------------ backends
+    def _load_backend(self) -> None:
+        if self._backend_attempted:
+            return
+        self._backend_attempted = True
+        desired = settings.NER_BACKEND
 
-                src_id = f"ent_{src_name.lower().replace(' ', '_')}"
-                tgt_id = f"ent_{tgt_name.lower().replace(' ', '_')}"
+        if desired == "gliner":
+            try:
+                from gliner import GLiNER  # noqa: PLC0415
 
-                if src_id not in seen_vertices:
-                    vertices.append(Vertex(id=src_id, label="Concept", properties={"name": src_name, "provenance": chunk_id}))
-                    seen_vertices.add(src_id)
+                logger.info("Loading GLiNER model '%s'...", settings.GLINER_MODEL)
+                self._gliner = GLiNER.from_pretrained(settings.GLINER_MODEL)
+                self._active_backend = "gliner"
+                return
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("GLiNER unavailable (%s); trying spaCy.", exc)
+                desired = "spacy"
 
-                if tgt_id not in seen_vertices:
-                    vertices.append(Vertex(id=tgt_id, label="Concept", properties={"name": tgt_name, "provenance": chunk_id}))
-                    seen_vertices.add(tgt_id)
+        if desired == "spacy":
+            try:
+                import spacy  # noqa: PLC0415
 
-                edges.append(
-                    Edge(
-                        source=src_id,
-                        target=tgt_id,
-                        type=rel_type,
-                        properties={"confidence": 0.90, "chunk_id": chunk_id}
-                    )
+                self._spacy = spacy.load(settings.SPACY_MODEL)
+                self._active_backend = "spacy"
+                return
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("spaCy unavailable (%s); using regex extraction.", exc)
+
+        self._active_backend = "regex"
+
+    @property
+    def active_backend(self) -> str:
+        self._load_backend()
+        return self._active_backend
+
+    @property
+    def model_label(self) -> str:
+        backend = self.active_backend
+        if backend == "gliner":
+            return settings.GLINER_MODEL.split("/")[-1]
+        if backend == "spacy":
+            return f"spacy-{settings.SPACY_MODEL}"
+        return "regex-extractor"
+
+    # ------------------------------------------------------------------ entities
+    def _extract_entities(self, text: str, schema: TenantGraphSchema) -> List[Dict[str, Any]]:
+        self._load_backend()
+        if self._active_backend == "gliner":
+            return self._extract_gliner(text, schema)
+        if self._active_backend == "spacy":
+            return self._extract_spacy(text, schema)
+        return self._extract_regex(text, schema)
+
+    def _extract_gliner(self, text: str, schema: TenantGraphSchema) -> List[Dict[str, Any]]:
+        """Zero-shot extraction using the tenant's own label set."""
+        labels = [l for l in schema.ner_labels if l in schema.vertex_labels]
+        if not labels:
+            return self._extract_regex(text, schema)
+        try:
+            predictions = self._gliner.predict_entities(text, labels, threshold=0.45)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("GLiNER inference failed (%s); falling back to regex.", exc)
+            return self._extract_regex(text, schema)
+
+        out: List[Dict[str, Any]] = []
+        for pred in predictions:
+            name = str(pred.get("text", "")).strip()
+            label = str(pred.get("label", "")).strip()
+            if len(name) < 2 or not schema.validate_vertex_label(label):
+                continue
+            out.append(
+                {
+                    "name": name,
+                    "label": label,
+                    "confidence": float(pred.get("score", 0.5)),
+                    "start": int(pred.get("start", -1)),
+                    "end": int(pred.get("end", -1)),
+                }
+            )
+        return out
+
+    def _extract_spacy(self, text: str, schema: TenantGraphSchema) -> List[Dict[str, Any]]:
+        mapping = _SPACY_LABEL_MAP.get(schema.domain, _SPACY_LABEL_MAP["generic"])
+        try:
+            doc = self._spacy(text)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("spaCy inference failed (%s); falling back to regex.", exc)
+            return self._extract_regex(text, schema)
+
+        out: List[Dict[str, Any]] = []
+        for ent in doc.ents:
+            label = mapping.get(ent.label_)
+            if not label or not schema.validate_vertex_label(label):
+                continue
+            name = ent.text.strip()
+            if len(name) < 2:
+                continue
+            out.append(
+                {"name": name, "label": label, "confidence": 0.75,
+                 "start": ent.start_char, "end": ent.end_char}
+            )
+        return out
+
+    def _extract_regex(self, text: str, schema: TenantGraphSchema) -> List[Dict[str, Any]]:
+        """Capitalized-phrase heuristic, filtered against section-header noise."""
+        default_label = self._default_label(schema)
+        out: List[Dict[str, Any]] = []
+        seen: set[str] = set()
+
+        for match in re.finditer(
+            r"\b[A-Z][a-zA-Z0-9'’\-]{1,30}(?:\s+[A-Z][a-zA-Z0-9'’\-]{1,30}){0,4}\b", text
+        ):
+            name = match.group(0).strip()
+            if len(name) < 3 or name.lower() in _STOPWORD_TITLES:
+                continue
+            # A single capitalized word at sentence start is usually not an entity.
+            if " " not in name and match.start() > 0 and text[match.start() - 2 : match.start()].strip().endswith("."):
+                continue
+            key = normalize_entity_name(name)
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            out.append(
+                {"name": name, "label": default_label, "confidence": 0.55,
+                 "start": match.start(), "end": match.end()}
+            )
+        return out
+
+    @staticmethod
+    def _default_label(schema: TenantGraphSchema) -> str:
+        for candidate in ("Entity", "Concept", "Person"):
+            if candidate in schema.vertex_labels:
+                return candidate
+        return sorted(schema.vertex_labels - {"Chunk"})[0] if schema.vertex_labels else "Entity"
+
+    # ------------------------------------------------------------------ relations
+    def _extract_relations(
+        self, text: str, entities: List[Dict[str, Any]], schema: TenantGraphSchema
+    ) -> List[Dict[str, Any]]:
+        """Find verb-mediated relations between entity mentions in the same sentence."""
+        patterns = _DOMAIN_RELATION_VERBS.get(schema.domain, _DOMAIN_RELATION_VERBS["generic"])
+        relations: List[Dict[str, Any]] = []
+
+        positioned = [e for e in entities if e.get("start", -1) >= 0]
+        positioned.sort(key=lambda e: e["start"])
+
+        for verb_pattern, edge_type in patterns:
+            if not schema.validate_edge_type(edge_type):
+                continue
+            for vmatch in re.finditer(rf"\b(?:{verb_pattern})\b", text, re.IGNORECASE):
+                before = [e for e in positioned if e["end"] <= vmatch.start()]
+                after = [e for e in positioned if e["start"] >= vmatch.end()]
+                if not before or not after:
+                    continue
+
+                source = before[-1]
+                target = after[0]
+                # Reject pairs separated by a sentence boundary.
+                span = text[source["end"] : target["start"]]
+                if re.search(r"[.!?]\s", span):
+                    continue
+                if normalize_entity_name(source["name"]) == normalize_entity_name(target["name"]):
+                    continue
+
+                gap = target["start"] - source["end"]
+                confidence = 0.9 if gap <= 60 else 0.82 if gap <= 120 else 0.75
+                relations.append(
+                    {
+                        "source": source["name"],
+                        "source_label": source["label"],
+                        "target": target["name"],
+                        "target_label": target["label"],
+                        "type": edge_type,
+                        "confidence": round(confidence, 2),
+                        "evidence": text[max(0, source["start"]) : min(len(text), target["end"])][:280],
+                    }
                 )
+        return relations
 
-        # 2. Extract capitalized entity mentions
-        capitalized = re.findall(r'\b[A-Z][a-zA-Z0-9_]{2,20}(?:\s+[A-Z][a-zA-Z0-9_]{2,20})*\b', text)
-        for mention in capitalized:
-            clean_name = mention.strip()
-            ent_id = f"ent_{clean_name.lower().replace(' ', '_')}"
-            if ent_id not in seen_vertices and len(clean_name) > 3:
-                vertices.append(Vertex(id=ent_id, label="Entity", properties={"name": clean_name, "provenance": chunk_id}))
-                seen_vertices.add(ent_id)
+    # ------------------------------------------------------------------ public
+    def extract_from_chunk(
+        self, text: str, chunk_id: str, schema: TenantGraphSchema
+    ) -> Tuple[List[Vertex], List[Edge]]:
+        """Extract schema-conformant vertices and edges from one chunk."""
+        if not text or not text.strip():
+            return [], []
+
+        raw_entities = self._extract_entities(text, schema)
+
+        vertices: List[Vertex] = []
+        by_key: Dict[Tuple[str, str], Vertex] = {}
+        for ent in raw_entities:
+            normalized = normalize_entity_name(ent["name"])
+            key = (normalized, ent["label"])
+            if not normalized or key in by_key:
+                continue
+            vertex = Vertex(
+                id=entity_id_for(ent["name"], ent["label"]),
+                label=ent["label"],
+                properties={
+                    "name": ent["name"],
+                    "normalized_name": normalized,
+                    "provenance": chunk_id,
+                    "confidence": ent.get("confidence", 0.5),
+                    "extractor": self.model_label,
+                },
+            )
+            by_key[key] = vertex
+            vertices.append(vertex)
+
+        edges: List[Edge] = []
+        seen_edges: set[Tuple[str, str, str]] = set()
+        for rel in self._extract_relations(text, raw_entities, schema):
+            if rel["confidence"] < settings.EDGE_CONFIDENCE_THRESHOLD:
+                continue
+            src_id = entity_id_for(rel["source"], rel.get("source_label", ""))
+            tgt_id = entity_id_for(rel["target"], rel.get("target_label", ""))
+            key = (src_id, rel["type"], tgt_id)
+            if src_id == tgt_id or key in seen_edges:
+                continue
+            seen_edges.add(key)
+            edges.append(
+                Edge(
+                    source=src_id,
+                    target=tgt_id,
+                    type=rel["type"],
+                    properties={
+                        "confidence": rel["confidence"],
+                        "chunk_id": chunk_id,
+                        "evidence": rel["evidence"],
+                    },
+                )
+            )
 
         return vertices, edges
 

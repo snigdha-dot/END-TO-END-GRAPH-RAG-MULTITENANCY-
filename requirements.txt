@@ -1,14 +1,24 @@
+# ---------------------------------------------------------------- Core runtime
 fastapi>=0.110.0
 uvicorn[standard]>=0.28.0
 pydantic>=2.6.0
 pydantic-settings>=2.2.0
 httpx>=0.27.0
+python-dotenv>=1.0.0
+
+# ---------------------------------------------------------------- Retrieval
 numpy>=1.26.0
-rapidfuzz>=3.6.0
-sentence-transformers>=2.5.0
-torch>=2.2.0
-spacy>=3.7.0
-gliner>=0.1.0
+rapidfuzz>=3.6.0          # Jaro-Winkler entity resolution
+tiktoken>=0.6.0           # accurate chunk token counting
+
+# ---------------------------------------------------------------- Testing
 pytest>=8.0.0
 pytest-asyncio>=0.23.0
-python-dotenv>=1.0.0
+locust>=2.20.0
+
+# ---------------------------------------------------------------- ML (optional)
+# The service runs without these: embeddings degrade to deterministic lexical
+# hashing, reranking to lexical overlap, and NER to regex. Install them for
+# production-quality semantic retrieval (~2.5GB with torch).
+#
+#   pip install -r requirements-ml.txt

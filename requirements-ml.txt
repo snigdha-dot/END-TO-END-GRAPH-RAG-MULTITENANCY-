@@ -1,0 +1,17 @@
+# Optional ML dependencies for production-quality semantic retrieval.
+#
+# Install after requirements.txt:
+#   pip install -r requirements.txt -r requirements-ml.txt
+#
+# Without these the service still runs end to end, but:
+#   * embeddings use deterministic lexical hashing (no semantic similarity)
+#   * reranking uses lexical overlap instead of a cross-encoder
+#   * NER falls back to regex instead of GLiNER/spaCy
+# /ready reports which mode is active via configuration_warnings.
+
+-r requirements.txt
+
+torch>=2.2.0
+sentence-transformers>=2.5.0   # bge-small-en-v1.5 + ms-marco-MiniLM cross-encoder
+gliner>=0.2.0                  # zero-shot NER driven by per-tenant schema labels
+spacy>=3.7.0                   # NER fallback; also run: python -m spacy download en_core_web_sm

@@ -1,37 +1,52 @@
-version: '3.8'
-
 services:
   arcadedb:
     image: arcadedata/arcadedb:latest
     container_name: team_b_arcadedb
     environment:
-      - ARCADEDB_SERVER_ROOT_PASSWORD=playwithdata
+      - ARCADEDB_SERVER_ROOT_PASSWORD=${ARCADEDB_PASSWORD:-playwithdata}
+      - JAVA_OPTS=-Darcadedb.server.rootPassword=${ARCADEDB_PASSWORD:-playwithdata}
     ports:
-      - "2480:2480" # HTTP REST / Cypher API
-      - "2424:2424" # Binary protocol
+      - "2480:2480"   # HTTP REST API + ArcadeDB Studio UI
+      - "2424:2424"   # binary protocol
     volumes:
-      - arcadedb_data:/arcadedb/databases
+      - arcadedb_data:/home/arcadedb/databases
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:2480/api/v1/ready || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS http://localhost:2480/api/v1/ready || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
 
   retrieval_service:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        # Set to "true" for semantic embeddings, cross-encoder reranking, and
+        # GLiNER NER. Adds ~2.5GB to the image.
+        INSTALL_ML: "${INSTALL_ML:-false}"
     container_name: team_b_retrieval_service
+    env_file:
+      - .env
     environment:
       - ARCADEDB_URL=http://arcadedb:2480
-      - ARCADEDB_USER=root
-      - ARCADEDB_PASSWORD=playwithdata
-      - APP_PORT=8000
+      - ARCADEDB_USER=${ARCADEDB_USER:-root}
+      - ARCADEDB_PASSWORD=${ARCADEDB_PASSWORD:-playwithdata}
     ports:
       - "8000:8000"
     depends_on:
       arcadedb:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
 
 volumes:
   arcadedb_data:
