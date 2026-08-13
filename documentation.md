@@ -19,3 +19,13 @@ All engineering decisions, code changes, schema definitions, and benchmark test 
   * Enforced parameterized Cypher query generation to eliminate injection risks.
 * **Telemetry & Cost Tracking Decisions**:
   * Implemented side-by-side reporting for step-level latency (ms) and model token/USD cost ($).
+
+### [2026-08-13 15:03:30 IST] - Git Repository Setup & Initial Commit
+* **Author**: Team B Lead Architect (AI Pair Developer)
+* **Action**: Initialized Git repository and staged initial project files.
+* **Details**:
+  * Configured `.gitignore` targeting Python build files, virtual environments (`.venv`), IDE settings, SQLite databases, and ArcadeDB local data caches.
+  * Executed `git init` in `scratch/team_b_graph_rag`.
+  * Staged and committed core project documents (`.gitignore`, `context.md`, `AGENTS.md`, `documentation.md`).
+  * Repository is ready for remote tracking (`git remote add origin <URL>`).
+
