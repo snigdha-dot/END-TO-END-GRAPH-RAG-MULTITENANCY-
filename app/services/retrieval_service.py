@@ -393,8 +393,14 @@ class HybridRetrievalService:
         max_depth: int = 2,
         top_k: int = 5,
         include_vector_search: bool = True,
+        disable_graph_path: bool = False,
     ) -> Dict[str, Any]:
-        """Run the full pipeline and return subgraph, passages, and telemetry."""
+        """Run the full pipeline and return subgraph, passages, and telemetry.
+
+        `disable_graph_path` suppresses Path B, reducing the pipeline to vector-only
+        retrieval. Used by the evaluation harness as an ablation control: comparing
+        the two isolates what multi-hop traversal actually contributes.
+        """
         telemetry = TelemetryTracker()
         tenant_id = ctx.tenant_id
         safe_query = CypherParameterizer.guard_user_text(query, "user_query")
@@ -428,7 +434,7 @@ class HybridRetrievalService:
         telemetry.record_step_latency("arcadedb_vector_knn", vector_ms)
 
         t_graph = time.perf_counter()
-        if seed_ids:
+        if seed_ids and not disable_graph_path:
             graph_subgraph = await self._graph_traversal(seed_ids, tenant_id, ctx, max_depth)
             entity_ids = [n.id for n in graph_subgraph.nodes]
             graph_chunks = await self._chunks_for_entities(entity_ids, tenant_id, top_k * 2)
@@ -482,6 +488,7 @@ class HybridRetrievalService:
             "graph_edges": len(graph_subgraph.edges),
             "graph_chunk_hits": len(graph_chunks),
             "fallback_used": fallback_used,
+            "graph_path_disabled": disable_graph_path,
             "semantic_embeddings": embedding_service.is_semantic,
             "cross_encoder_active": reranker_service.has_cross_encoder,
         }
