@@ -119,3 +119,40 @@ All engineering decisions, code changes, schema definitions, and benchmark test 
 WSL2 is not installed, so Docker Desktop cannot start and ArcadeDB has never run. The 7 integration tests and the end-to-end multi-hop proof remain unexecuted until then. Run `wsl --install --no-distribution` as Administrator, reboot, then `docker compose up -d arcadedb`.
 
 
+
+### [2026-08-14 IST] - Production Evaluation Harness (Retrieval Quality + Tenant Isolation)
+* **Author**: Team B Lead Architect (AI Pair Developer)
+* **Action**: Built a labelled evaluation harness that produces auditable production metrics rather than assertions. Commit `ff1e6b7`.
+
+#### Artifacts created
+| File | Purpose |
+| :--- | :--- |
+| `tests/evaluation/dataset.py` | Two deliberately disjoint tenant corpora (`movies_bot`, `ai_trends_bot`) with 22 labelled questions carrying ground-truth entity ids; 8 multi-hop, plus edge cases and cross-domain negatives; 8 adversarial injection payloads |
+| `tests/evaluation/metrics.py` | Recall@k, Precision@k, MRR, nDCG@k implemented directly so figures are auditable; entity-linking rate, fallback rate, error rate, latency percentiles; `multi_hop_advantage()` for graph-vs-vector lift |
+| `tests/evaluation/isolation_suite.py` | Bidirectional leakage with real data, direct entity-id probing, 50 interleaved concurrent cross-tenant queries, tenant-id edge cases (path traversal, unicode homoglyph, null byte, injection), fail-closed guard verification |
+| `tests/evaluation/run_evaluation.py` | Provisions, ingests, scores, runs the isolation battery, emits the report |
+| `tests/evaluation/report.py` | Markdown + JSON with explicit hard/soft gates |
+
+#### Design decisions
+* **Disjoint corpora by construction.** The two tenant vocabularies do not overlap, so any cross-tenant hit is unambiguous evidence of a leak rather than coincidental term overlap.
+* **Isolation is the only hard commercial gate.** Retrieval quality is a tuning problem; cross-tenant leakage invalidates the product regardless of quality scores.
+* **Ablation control added.** `execute_retrieval()` gains `disable_graph_path`, reducing the pipeline to vector-only so the graph path's actual contribution can be isolated. `retrieval_diagnostics` gains `graph_path_disabled`.
+* **The runner refuses to emit metrics without a live ArcadeDB** (exit code 2). Numbers produced by the fallback path would describe the harness rather than the system — the same fail-open failure mode this service was hardened against in the previous entry.
+
+#### Verified (offline paths only)
+* 12/12 isolation checks pass: tenant-id validation across 11 hostile inputs, plus the unscoped-access fail-closed guard.
+* Preflight correctly refuses and exits 2 when ArcadeDB is unreachable.
+
+#### Not yet executed
+Every quality metric (Recall@k, MRR, nDCG@k, graph lift) and the live half of the isolation battery (leakage, entity probing, concurrency, injection). These require a running database.
+
+#### Blocker unchanged
+`wsl --install --no-distribution` requires Administrator; the agent session runs unelevated and cannot raise a UAC prompt. Docker Desktop cannot start without WSL2, and Java is absent so the non-Docker ArcadeDB path is also unavailable. All three routes to a live database converge on an elevated installer plus a reboot.
+
+**To produce the report:**
+1. `wsl --install --no-distribution` (Administrator PowerShell), then reboot
+2. Launch Docker Desktop; `docker compose up -d arcadedb`
+3. `.\.venv\Scripts\python.exe -m tests.evaluation.run_evaluation`
+4. Output: `reports/EVALUATION_REPORT.md` (+ timestamped `.md`/`.json`)
+
+Optional but recommended: `pip install -r requirements-ml.txt` (~2.5GB, no admin needed) before running. Without it the harness runs on lexical fallbacks and quality metrics understate real performance; the report flags this at the top. Isolation results are unaffected either way.
