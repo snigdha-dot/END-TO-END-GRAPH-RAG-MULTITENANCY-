@@ -151,6 +151,166 @@ class IngestionService:
             "execution_time_ms": result["latency_breakdown_ms"]["total_retrieval_latency"],
         }
 
+    # ------------------------------------------------------------------ structured
+    async def ingest_structured(
+        self,
+        ctx: TenantContext,
+        source_path: Any,
+        max_rows: Optional[int] = None,
+        doc_prefix: str = "row",
+        batch_size: int = 250,
+    ) -> Dict[str, Any]:
+        """Ingest a tabular source (CSV, TSV, XLSX, JSON, JSONL).
+
+        Skips chunking and NER entirely. Each row is already one semantic unit, and
+        its entities are already separated into columns — so relations are read from
+        column co-occurrence at confidence 1.0 rather than inferred from prose at
+        0.75-0.9. Resolution, schema validation, and the write path are shared with
+        the prose pipeline, so canonical ids and isolation guarantees are identical.
+
+        Rows are processed in batches: a large CSV would otherwise hold every chunk,
+        vector, and entity in memory at once before the first write.
+        """
+        from pathlib import Path  # noqa: PLC0415
+
+        from app.services.structured_ingestion import (  # noqa: PLC0415
+            structured_ingestion_service,
+        )
+
+        telemetry = TelemetryTracker()
+        schema = ctx.schema
+        tenant_id = ctx.tenant_id
+        path = Path(source_path)
+
+        # ---------------------------------------------------------- profile
+        t0 = time.perf_counter()
+        rows, columns, profiles = structured_ingestion_service.analyze(path, max_rows)
+        telemetry.record_step_latency("column_profiling", (time.perf_counter() - t0) * 1000)
+
+        if not rows:
+            return self._empty_result(path.stem, tenant_id, telemetry)
+
+        totals = {
+            "chunks": 0, "entities": 0, "relationships": 0,
+            "mentions": 0, "rejections": 0, "statements": 0,
+        }
+        embed_ms = 0.0
+        resolve_ms = 0.0
+        write_ms = 0.0
+
+        for start in range(0, len(rows), batch_size):
+            batch = rows[start : start + batch_size]
+            documents = structured_ingestion_service.build_documents(
+                batch, profiles, schema, doc_prefix=f"{doc_prefix}_{start}"
+            )
+            if not documents:
+                continue
+
+            # ------------------------------------------------------ chunk
+            # One verbalized row is one chunk: it is already a coherent semantic
+            # unit, so splitting it would separate a fact from its subject.
+            chunks: List[DocumentChunk] = [
+                DocumentChunk(
+                    chunk_id=f"{doc.doc_id}_chunk_0",
+                    parent_doc_id=doc.doc_id,
+                    chunk_index=0,
+                    text=doc.text,
+                    token_count=max(1, len(doc.text.split())),
+                    section_path=[],
+                    metadata=doc.metadata,
+                )
+                for doc in documents
+            ]
+
+            # ------------------------------------------------------ embed
+            t1 = time.perf_counter()
+            vectors = embedding_service.encode_batch([c.text for c in chunks])
+            embed_ms += (time.perf_counter() - t1) * 1000
+
+            # ------------------------------------------------------ collect
+            all_vertices: List[Vertex] = []
+            all_edges: List[Edge] = []
+            mentions: List[Tuple[str, str]] = []
+            for doc, chunk in zip(documents, chunks):
+                all_vertices.extend(doc.entities)
+                all_edges.extend(doc.edges)
+                for vertex in doc.entities:
+                    mentions.append((vertex.id, chunk.chunk_id))
+
+            # ------------------------------------------------------ resolve
+            t2 = time.perf_counter()
+            resolved_vertices, resolved_edges = resolution_service.resolve_and_merge(
+                all_vertices, all_edges, schema=schema, use_embeddings=False
+            )
+            resolve_ms += (time.perf_counter() - t2) * 1000
+
+            canonical_ids = {v.id for v in resolved_vertices}
+            resolved_mentions = {
+                (eid, cid) for eid, cid in mentions if eid in canonical_ids
+            }
+
+            # ------------------------------------------------------ validate
+            validated_vertices = [
+                v for v in resolved_vertices if self._validate_vertex(v, schema)
+            ]
+            validated_edges = [
+                e for e in resolved_edges if self._validate_edge(e, schema, canonical_ids)
+            ]
+            totals["rejections"] += (len(resolved_vertices) - len(validated_vertices)) + (
+                len(resolved_edges) - len(validated_edges)
+            )
+
+            # ------------------------------------------------------ write
+            t3 = time.perf_counter()
+            totals["statements"] += await self._write_graph(
+                tenant_id, chunks, vectors, validated_vertices, validated_edges,
+                resolved_mentions,
+            )
+            write_ms += (time.perf_counter() - t3) * 1000
+
+            totals["chunks"] += len(chunks)
+            totals["entities"] += len(validated_vertices)
+            totals["relationships"] += len(validated_edges)
+            totals["mentions"] += len(resolved_mentions)
+
+            logger.info(
+                "Structured ingest %s: rows %d-%d written (%d entities, %d edges)",
+                path.name, start, start + len(batch), len(validated_vertices),
+                len(validated_edges),
+            )
+
+        telemetry.record_step_latency("chunk_embedding", embed_ms)
+        telemetry.record_step_latency("entity_resolution", resolve_ms)
+        telemetry.record_step_latency("graph_write", write_ms)
+        telemetry.record_model_call(
+            step_name="chunk_embedding",
+            model_name=embedding_service.model_label,
+            prompt_tokens=totals["chunks"] * 100,
+            completion_tokens=0,
+            duration_ms=embed_ms,
+        )
+
+        result = telemetry.finalize()
+        return {
+            "tenant_id": tenant_id,
+            "doc_id": path.stem,
+            "source_format": path.suffix.lstrip("."),
+            "rows_processed": len(rows),
+            "columns_profiled": len(columns),
+            "column_roles": {p.name: p.role for p in profiles},
+            "chunks_created": totals["chunks"],
+            "entities_extracted": totals["entities"],
+            "relationships_created": totals["relationships"],
+            "mentions_linked": totals["mentions"],
+            "schema_rejections": totals["rejections"],
+            "statements_executed": totals["statements"],
+            "embedding_model": embedding_service.model_label,
+            "extraction_backend": "structured",
+            "telemetry": result,
+            "status": "success",
+            "execution_time_ms": result["latency_breakdown_ms"]["total_retrieval_latency"],
+        }
+
     # ------------------------------------------------------------------ validation
     @staticmethod
     def _validate_vertex(vertex: Vertex, schema) -> bool:
