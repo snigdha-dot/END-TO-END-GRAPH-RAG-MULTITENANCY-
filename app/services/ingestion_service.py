@@ -238,14 +238,29 @@ class IngestionService:
                 }
             )
 
+        # Label -> entity_id, so edge writes can name both endpoint labels. An
+        # untyped `MATCH (a {entity_id: ...}), (b {entity_id: ...})` forces a scan of
+        # every vertex type for both endpoints and degrades into a cartesian product:
+        # measured at 65s on a 130-chunk graph, versus milliseconds when labelled,
+        # because only the labelled form uses the UNIQUE index on entity_id.
+        label_by_id = {v.id: v.label for v in vertices if is_safe_identifier(v.label)}
+
         for edge in edges:
             etype = edge.type
             if not is_safe_identifier(etype):
                 raise SchemaValidationError(f"Unsafe edge type reached write stage: {etype!r}")
+
+            source_label = label_by_id.get(edge.source)
+            target_label = label_by_id.get(edge.target)
+            if not source_label or not target_label:
+                # Endpoint was dropped by schema validation; the edge cannot be written.
+                continue
+
             statements.append(
                 {
                     "command": (
-                        "MATCH (a {entity_id: $source}), (b {entity_id: $target}) "
+                        f"MATCH (a:{source_label} {{entity_id: $source}}) "
+                        f"MATCH (b:{target_label} {{entity_id: $target}}) "
                         f"MERGE (a)-[r:{etype}]->(b) "
                         "SET r.confidence = $confidence, r.chunk_id = $chunk_id, "
                         "r.evidence = $evidence"
@@ -263,10 +278,14 @@ class IngestionService:
         # MENTIONED_IN bridges the graph back to text, so a traversal can return
         # the passages that support it.
         for entity_id, chunk_id in sorted(mentions):
+            entity_label = label_by_id.get(entity_id)
+            if not entity_label:
+                continue
             statements.append(
                 {
                     "command": (
-                        "MATCH (e {entity_id: $entity_id}), (c:Chunk {chunk_id: $chunk_id}) "
+                        f"MATCH (e:{entity_label} {{entity_id: $entity_id}}) "
+                        "MATCH (c:Chunk {chunk_id: $chunk_id}) "
                         "MERGE (e)-[:MENTIONED_IN]->(c)"
                     ),
                     "params": {"entity_id": entity_id, "chunk_id": chunk_id},
