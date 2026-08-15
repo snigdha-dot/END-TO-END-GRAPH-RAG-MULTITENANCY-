@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     # Ingestion writes tolerate more than the read path: the Cypher engine has a
     # multi-second first-call warmup, and writes are not on the user-facing path.
     ARCADEDB_WRITE_TIMEOUT_MS: int = 30000
+    # Multi-hop traversal on a dense graph legitimately exceeds the 3000ms read
+    # bound. It is given its own budget and degrades to vector-only on timeout,
+    # rather than failing a request that vector search alone could still answer.
+    ARCADEDB_TRAVERSAL_TIMEOUT_MS: int = 8000
     # Ingestion writes are I/O-bound one-statement-per-request round trips. Bounded
     # concurrency overlaps the waiting without exhausting the pool or starving
     # concurrent retrieval traffic.

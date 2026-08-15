@@ -34,7 +34,9 @@ class _StubDB:
          "normalized_name": "interstellar", "aliases": []},
     ]
 
-    async def execute_cypher(self, cypher: str, params=None, *, tenant_id=None, language="cypher"):
+    async def execute_cypher(
+        self, cypher: str, params=None, *, tenant_id=None, language="cypher", timeout_ms=None
+    ):
         params = params or {}
         if "normalized_name IN $names" in cypher:
             names = set(params.get("names", []))
@@ -78,7 +80,7 @@ class _StubDB:
             ]
         return []
 
-    async def execute_sql(self, sql: str, params=None, *, tenant_id=None):
+    async def execute_sql(self, sql: str, params=None, *, tenant_id=None, timeout_ms=None):
         if "FROM Chunk" in sql:
             return [
                 {"chunk_id": "c1", "text": "Christopher Nolan directed Inception.",

@@ -304,7 +304,20 @@ class HybridRetrievalService:
         cypher, params = CypherParameterizer.build_parameterized_traversal(
             start_node_ids=seed_ids, max_depth=max_depth, schema=ctx.schema
         )
-        rows = await arcadedb_client.execute_cypher(cypher, params, tenant_id=tenant_id)
+        try:
+            rows = await arcadedb_client.execute_cypher(
+                cypher, params, tenant_id=tenant_id,
+                timeout_ms=settings.ARCADEDB_TRAVERSAL_TIMEOUT_MS,
+            )
+        except DatabaseConnectionError:
+            # A slow traversal must not fail a request that vector search can still
+            # answer. Returning an empty subgraph degrades to Path A rather than 503.
+            logger.warning(
+                "Graph traversal exceeded %dms for tenant '%s'; degrading to vector-only.",
+                settings.ARCADEDB_TRAVERSAL_TIMEOUT_MS, tenant_id,
+            )
+            return Subgraph()
+
         subgraph = self._parse_traversal(rows)
 
         # The traversal projects endpoints only, because ArcadeDB's Cypher layer has
@@ -312,18 +325,27 @@ class HybridRetrievalService:
         # between the reached nodes, which is what carries the multi-hop answer.
         if subgraph.nodes:
             node_ids = [n.id for n in subgraph.nodes][: settings.MAX_TRAVERSAL_NODES]
-            edge_rows = await arcadedb_client.execute_cypher(
-                "MATCH (a)-[r]->(b) "
-                "WHERE a.entity_id IN $ids AND b.entity_id IN $ids "
-                "RETURN a.entity_id AS source_id, type(r) AS rel_type, "
-                "b.entity_id AS target_id, r.confidence AS confidence "
-                "LIMIT $limit",
-                {"ids": node_ids, "limit": settings.MAX_TRAVERSAL_NODES},
-                tenant_id=tenant_id,
-            )
-            subgraph = Subgraph(
-                nodes=subgraph.nodes, edges=self._parse_edges(edge_rows)
-            )
+            try:
+                edge_rows = await arcadedb_client.execute_cypher(
+                    "MATCH (a)-[r]->(b) "
+                    "WHERE a.entity_id IN $ids AND b.entity_id IN $ids "
+                    "RETURN a.entity_id AS source_id, type(r) AS rel_type, "
+                    "b.entity_id AS target_id, r.confidence AS confidence "
+                    "LIMIT $limit",
+                    {"ids": node_ids, "limit": settings.MAX_TRAVERSAL_NODES},
+                    tenant_id=tenant_id,
+                    timeout_ms=settings.ARCADEDB_TRAVERSAL_TIMEOUT_MS,
+                )
+                subgraph = Subgraph(
+                    nodes=subgraph.nodes, edges=self._parse_edges(edge_rows)
+                )
+            except DatabaseConnectionError:
+                # Keep the nodes: they are still useful context even without the
+                # typed edges between them.
+                logger.warning(
+                    "Edge recovery timed out for tenant '%s'; returning nodes only.",
+                    tenant_id,
+                )
 
         return subgraph
 
