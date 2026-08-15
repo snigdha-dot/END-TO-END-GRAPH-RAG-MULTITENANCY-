@@ -96,6 +96,14 @@ class LLMExtractionProvider(ABC):
     @abstractmethod
     async def propose(self, text: str, schema: TenantGraphSchema) -> ExtractionProposal: ...
 
+    @abstractmethod
+    async def complete_json(self, prompt: str) -> Dict[str, Any]:
+        """Run an arbitrary prompt expecting a JSON object back.
+
+        Separate from `propose` because not every LLM call is extraction:
+        community reports need a summary, not entities and relations.
+        """
+
 
 class NullLLMProvider(LLMExtractionProvider):
     """Active in the FOSS-only build. Proposes nothing; call sites stay uniform."""
@@ -110,6 +118,9 @@ class NullLLMProvider(LLMExtractionProvider):
 
     async def propose(self, text: str, schema: TenantGraphSchema) -> ExtractionProposal:
         return ExtractionProposal()
+
+    async def complete_json(self, prompt: str) -> Dict[str, Any]:
+        return {}
 
 
 class HTTPLLMProvider(LLMExtractionProvider):
@@ -132,14 +143,9 @@ class HTTPLLMProvider(LLMExtractionProvider):
     def is_available(self) -> bool:
         return bool(self.api_key)
 
-    async def propose(self, text: str, schema: TenantGraphSchema) -> ExtractionProposal:
+    async def _call(self, prompt: str) -> Tuple[str, int, int]:
+        """Single transport for every call. Returns (content, prompt_tok, completion_tok)."""
         import httpx  # noqa: PLC0415
-
-        prompt = EXTRACTION_PROMPT.format(
-            entity_types=", ".join(sorted(schema.vertex_labels - {"Chunk"})),
-            relation_types=", ".join(sorted(schema.edge_types - {"MENTIONED_IN"})),
-            text=text[:6000],
-        )
 
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
@@ -151,18 +157,22 @@ class HTTPLLMProvider(LLMExtractionProvider):
                 response = await client.post(url, json=payload, headers=headers)
                 if response.status_code != 200:
                     logger.warning(
-                        "LLM extraction failed (HTTP %s): %s",
+                        "LLM call failed (HTTP %s): %s",
                         response.status_code, response.text[:200],
                     )
-                    return ExtractionProposal(model_name=self.model)
+                    return "", 0, 0
+                return self._parse_response(response.json())
+        except Exception as exc:  # noqa: BLE001 - an LLM fault must not fail ingestion
+            logger.warning("LLM call error: %s", exc)
+            return "", 0, 0
 
-                content, prompt_tokens, completion_tokens = self._parse_response(
-                    response.json()
-                )
-        except Exception as exc:  # noqa: BLE001 - extraction must not fail ingestion
-            logger.warning("LLM extraction error: %s", exc)
-            return ExtractionProposal(model_name=self.model)
-
+    async def propose(self, text: str, schema: TenantGraphSchema) -> ExtractionProposal:
+        prompt = EXTRACTION_PROMPT.format(
+            entity_types=", ".join(sorted(schema.vertex_labels - {"Chunk"})),
+            relation_types=", ".join(sorted(schema.edge_types - {"MENTIONED_IN"})),
+            text=text[:6000],
+        )
+        content, prompt_tokens, completion_tokens = await self._call(prompt)
         parsed = self._parse_json(content)
         return ExtractionProposal(
             entities=parsed.get("entities", []),
@@ -171,6 +181,10 @@ class HTTPLLMProvider(LLMExtractionProvider):
             completion_tokens=completion_tokens,
             model_name=self.model,
         )
+
+    async def complete_json(self, prompt: str) -> Dict[str, Any]:
+        content, _, _ = await self._call(prompt)
+        return self._parse_json(content)
 
     def _openai_request(self, prompt: str) -> Tuple[Dict, str, Dict]:
         return (
