@@ -82,6 +82,17 @@ class RetrievalRouter:
     def plan(self, analysis: QueryAnalysis, top_k: int = 5) -> RetrievalPlan:
         candidate_k = max(top_k * 4, 20)
 
+        if analysis.intent is QueryIntent.CLARIFY:
+            # The pipeline short-circuits before planning, so this is defensive:
+            # a clarification must never fall through to a retrieval plan and
+            # silently answer a question the user did not ask.
+            return RetrievalPlan(
+                intent=analysis.intent,
+                use_vector=False, use_lexical=False,
+                use_graph=False, use_community=False, use_graph_expansion=False,
+                rationale=["query underspecified; awaiting clarification"],
+            )
+
         if analysis.intent is QueryIntent.GLOBAL:
             return self._global_plan(analysis, candidate_k, top_k)
         if analysis.intent is QueryIntent.LEXICAL:

@@ -45,11 +45,18 @@ class PassRule(str, Enum):
     ABSTAINS = "abstains"                    # must NOT surface the forbidden term
     REJECTS = "rejects"                      # must raise a security error
     ROUTES_TO = "routes_to"                  # must classify to a given intent
+    CLARIFIES = "clarifies"                  # must ask for clarification, not guess
 
 
 @dataclass
 class EdgeCaseQuery:
-    """One test query with the criteria for judging its answer."""
+    """One test query with the criteria for judging its answer.
+
+    Ground-truth fields (`relevant_*`) drive the IR metrics. They are optional:
+    a query can be scored behaviourally (did it abstain? did it route correctly?)
+    without knowing which specific chunks are relevant, and forcing ground truth
+    onto abstention and security cases would be meaningless.
+    """
 
     query: str
     category: Category
@@ -62,9 +69,25 @@ class EdgeCaseQuery:
     min_graph_edges: int = 0
     note: str = ""
 
+    # ------------------------------------------------------------ ground truth
+    # Substrings that identify a relevant chunk. Chunk ids are generated at
+    # ingestion and change whenever chunking configuration does, so matching on
+    # content keeps the ground truth stable across a chunking A/B.
+    relevant_chunk_markers: List[str] = field(default_factory=list)
+    relevant_entities: List[str] = field(default_factory=list)
+    relevant_relationships: List[str] = field(default_factory=list)
+
+    # Behaviour expected when the query is underspecified.
+    expects_clarification: bool = False
+    conversation_context: List[str] = field(default_factory=list)
+
     @property
     def is_security(self) -> bool:
         return self.category in (Category.ISOLATION, Category.ADVERSARIAL)
+
+    @property
+    def has_ground_truth(self) -> bool:
+        return bool(self.relevant_chunk_markers or self.relevant_entities)
 
 
 AYUR = "ayurveda_v2"
@@ -74,29 +97,53 @@ DOCS = "herbs_docs"
 # ============================================================ 1. BASIC SEMANTIC (12)
 SEMANTIC_QUERIES: List[EdgeCaseQuery] = [
     EdgeCaseQuery("What are the symptoms of Cough?", Category.SEMANTIC, AYUR,
-                  PassRule.RETRIEVES_TEXT, expect_text=["cough"]),
+                  PassRule.RETRIEVES_TEXT, expect_text=["cough"],
+                  relevant_chunk_markers=["Disease: Cough"],
+                  relevant_entities=["canon_concept_cough"]),
     EdgeCaseQuery("Tell me about Arthritis", Category.SEMANTIC, AYUR,
-                  PassRule.RETRIEVES_TEXT, expect_text=["arthritis"]),
+                  PassRule.RETRIEVES_TEXT, expect_text=["arthritis"],
+                  relevant_chunk_markers=["Disease: Arthritis"],
+                  relevant_entities=["canon_concept_arthritis"]),
     EdgeCaseQuery("How is Constipation managed?", Category.SEMANTIC, AYUR,
-                  PassRule.RETRIEVES_TEXT, expect_text=["constipation"]),
+                  PassRule.RETRIEVES_TEXT, expect_text=["constipation"],
+                  relevant_chunk_markers=["Disease: Constipation"],
+                  relevant_entities=["canon_concept_constipation"]),
     EdgeCaseQuery("What causes Fever?", Category.SEMANTIC, AYUR,
-                  PassRule.RETRIEVES_TEXT, expect_text=["fever"]),
+                  PassRule.RETRIEVES_TEXT, expect_text=["fever"],
+                  relevant_chunk_markers=["Disease: Fever"],
+                  relevant_entities=["canon_concept_fever"]),
     EdgeCaseQuery("Information about Alzheimer's Disease", Category.SEMANTIC, AYUR,
-                  PassRule.RETRIEVES_TEXT, expect_text=["alzheimer"]),
+                  PassRule.RETRIEVES_TEXT, expect_text=["alzheimer"],
+                  relevant_chunk_markers=["Disease: Alzheimer"],
+                  relevant_entities=["canon_concept_alzheimers_disease"]),
     EdgeCaseQuery("What is Arrhythmia?", Category.SEMANTIC, AYUR,
-                  PassRule.RETRIEVES_TEXT, expect_text=["arrhythmia"]),
+                  PassRule.RETRIEVES_TEXT, expect_text=["arrhythmia"],
+                  relevant_chunk_markers=["Disease: Arrhythmia"],
+                  relevant_entities=["canon_concept_arrhythmia"]),
     EdgeCaseQuery("Describe Adrenal Insufficiency", Category.SEMANTIC, AYUR,
-                  PassRule.RETRIEVES_TEXT, expect_text=["adrenal"]),
+                  PassRule.RETRIEVES_TEXT, expect_text=["adrenal"],
+                  relevant_chunk_markers=["Disease: Adrenal"],
+                  relevant_entities=["canon_concept_adrenal_insufficiency"]),
     EdgeCaseQuery("What is Ashwagandha used for?", Category.SEMANTIC, DOCS,
-                  PassRule.RETRIEVES_TEXT, expect_text=["ashwagandha"]),
+                  PassRule.RETRIEVES_TEXT, expect_text=["ashwagandha"],
+                  relevant_chunk_markers=["Ashwagandha"],
+                  relevant_entities=["canon_entity_ashwagandha"]),
     EdgeCaseQuery("Tell me about Turmeric", Category.SEMANTIC, DOCS,
-                  PassRule.RETRIEVES_TEXT, expect_text=["turmeric"]),
+                  PassRule.RETRIEVES_TEXT, expect_text=["turmeric"],
+                  relevant_chunk_markers=["Turmeric"],
+                  relevant_entities=["canon_entity_turmeric"]),
     EdgeCaseQuery("What does Brahmi do?", Category.SEMANTIC, DOCS,
-                  PassRule.RETRIEVES_TEXT, expect_text=["brahmi"]),
+                  PassRule.RETRIEVES_TEXT, expect_text=["brahmi"],
+                  relevant_chunk_markers=["Brahmi"],
+                  relevant_entities=["canon_entity_brahmi"]),
     EdgeCaseQuery("Explain the role of Ghee in preparation", Category.SEMANTIC, DOCS,
-                  PassRule.RETRIEVES_TEXT, expect_text=["ghee"]),
+                  PassRule.RETRIEVES_TEXT, expect_text=["ghee"],
+                  relevant_chunk_markers=["Ghee"],
+                  relevant_entities=["canon_entity_ghee"]),
     EdgeCaseQuery("What is Curcumin?", Category.SEMANTIC, DOCS,
-                  PassRule.RETRIEVES_TEXT, expect_text=["curcumin"]),
+                  PassRule.RETRIEVES_TEXT, expect_text=["curcumin"],
+                  relevant_chunk_markers=["Curcumin"],
+                  relevant_entities=["canon_entity_curcumin"]),
 ]
 
 # ============================================================ 2. EXACT ENTITY (8)
@@ -279,14 +326,26 @@ CROSS_DOC_QUERIES: List[EdgeCaseQuery] = [
 # ============================================================ 10. AMBIGUOUS (5)
 AMBIGUOUS_QUERIES: List[EdgeCaseQuery] = [
     EdgeCaseQuery("treatment", Category.AMBIGUOUS, AYUR, PassRule.RETRIEVES_ANY,
-                  note="Single bare word, no anchor"),
-    EdgeCaseQuery("it", Category.AMBIGUOUS, AYUR, PassRule.RETRIEVES_ANY,
-                  note="Pure stopword; must not crash"),
-    EdgeCaseQuery("what about that", Category.AMBIGUOUS, AYUR, PassRule.RETRIEVES_ANY,
-                  note="Anaphora with no antecedent"),
-    EdgeCaseQuery("more", Category.AMBIGUOUS, DOCS, PassRule.RETRIEVES_ANY),
-    EdgeCaseQuery("herbs", Category.AMBIGUOUS, DOCS, PassRule.RETRIEVES_ANY,
-                  note="Category word, no specific entity"),
+                  note="Bare topic word, but broad enough to retrieve usefully"),
+    EdgeCaseQuery("it", Category.AMBIGUOUS, AYUR, PassRule.CLARIFIES,
+                  expects_clarification=True,
+                  note="Pure anaphora with no antecedent; guessing would be wrong"),
+    EdgeCaseQuery("what about that", Category.AMBIGUOUS, AYUR, PassRule.CLARIFIES,
+                  expects_clarification=True,
+                  note="Anaphora, no antecedent in context"),
+    EdgeCaseQuery("more", Category.AMBIGUOUS, DOCS, PassRule.CLARIFIES,
+                  expects_clarification=True,
+                  note="Continuation request with no prior turn to continue"),
+    EdgeCaseQuery("more", Category.AMBIGUOUS, DOCS, PassRule.RETRIEVES_TEXT,
+                  expect_text=["ashwagandha"],
+                  conversation_context=["What is Ashwagandha used for?"],
+                  note="Same word WITH context: resolves against the prior turn "
+                       "instead of asking. The pair is the point - identical input, "
+                       "different correct behaviour."),
+    EdgeCaseQuery("herbs", Category.AMBIGUOUS, DOCS, PassRule.CLARIFIES,
+                  expects_clarification=True,
+                  note="Category word naming no entity; arbitrary retrieval would "
+                       "look like an answer while being a guess"),
 ]
 
 # ============================================================ 11. NO-ANSWER (5)

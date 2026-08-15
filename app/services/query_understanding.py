@@ -20,7 +20,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Optional, Set
+from typing import List, Optional, Sequence, Set
 
 from app.services.extraction_service import normalize_entity_name
 
@@ -30,6 +30,39 @@ class QueryIntent(str, Enum):
     GLOBAL = "global"
     LEXICAL = "lexical"
     HYBRID = "hybrid"
+    # Underspecified: retrieving anything would present a guess as an answer.
+    CLARIFY = "clarify"
+
+
+# Queries that carry no retrievable content on their own. Anaphora needs an
+# antecedent; a bare continuation needs a prior turn. Retrieving arbitrary chunks
+# for these looks like an answer while being a coin flip, which is worse than
+# admitting the query cannot be resolved.
+_ANAPHORIC = frozenset({
+    "it", "that", "this", "they", "them", "those", "these", "he", "she",
+    "him", "her", "his", "hers", "its", "their", "theirs",
+})
+
+_CONTINUATION = frozenset({
+    "more", "next", "another", "again", "continue", "else", "other", "others",
+    "further", "additional", "rest", "remaining",
+})
+
+# Container words that name a *set* rather than a subject. Distinct from broad
+# topic words like "treatment" or "symptoms", which still retrieve usefully
+# because documents discuss them directly. The test is whether the word could
+# plausibly be the topic of a passage: "treatment" can, "everything" cannot.
+_BARE_CATEGORY = frozenset({
+    "herbs", "herb", "documents", "document", "data", "info", "information",
+    "stuff", "things", "items", "entries", "records", "results",
+    "everything", "anything", "something",
+})
+
+_ANAPHORIC_PHRASE = re.compile(
+    r"^\s*(?:what about|how about|and|but|ok|okay|then|so)?\s*"
+    r"(?:that|this|it|those|these|them|they)\s*\??\s*$",
+    re.IGNORECASE,
+)
 
 
 # Phrasings that ask about a corpus as a whole rather than about any entity.
@@ -96,10 +129,21 @@ class QueryAnalysis:
     confidence: float = 0.0
     signals: List[str] = field(default_factory=list)
 
+    # Set when the query cannot be resolved as written.
+    needs_clarification: bool = False
+    clarification_prompt: str = ""
+    resolved_query: str = ""      # rewritten using conversation context
+    resolved_from_context: bool = False
+
     @property
     def has_anchor(self) -> bool:
         """Whether anything in the query can seed a graph traversal."""
         return bool(self.mentions or self.identifiers)
+
+    @property
+    def effective_query(self) -> str:
+        """The query retrieval should actually run."""
+        return self.resolved_query or self.query
 
     def to_dict(self) -> dict:
         return {
@@ -110,6 +154,10 @@ class QueryAnalysis:
             "suggested_hops": self.suggested_hops,
             "confidence": round(self.confidence, 3),
             "signals": self.signals,
+            "needs_clarification": self.needs_clarification,
+            "clarification_prompt": self.clarification_prompt,
+            "resolved_from_context": self.resolved_from_context,
+            "effective_query": self.effective_query,
         }
 
 
@@ -118,10 +166,41 @@ class QueryUnderstanding:
 
     MAX_MENTIONS = 8
 
-    def analyze(self, query: str) -> QueryAnalysis:
+    def analyze(
+        self, query: str, conversation_context: Optional[Sequence[str]] = None
+    ) -> QueryAnalysis:
         text = (query or "").strip()
         if not text:
-            return QueryAnalysis(query="", intent=QueryIntent.HYBRID, confidence=0.0)
+            return QueryAnalysis(
+                query="",
+                intent=QueryIntent.CLARIFY,
+                needs_clarification=True,
+                clarification_prompt="Could you tell me what you would like to know?",
+            )
+
+        # Underspecified queries are resolved against conversation context when
+        # there is any, and otherwise surfaced as a clarification request. The
+        # alternative - retrieving something plausible - presents a guess as an
+        # answer, which is the worse failure.
+        underspecified, reason = self._is_underspecified(text)
+        if underspecified:
+            resolved = self._resolve_from_context(text, conversation_context)
+            if resolved:
+                analysis = self.analyze(resolved)
+                analysis.query = text
+                analysis.resolved_query = resolved
+                analysis.resolved_from_context = True
+                analysis.signals.append(f"resolved_from_context:{reason}")
+                return analysis
+
+            return QueryAnalysis(
+                query=text,
+                intent=QueryIntent.CLARIFY,
+                needs_clarification=True,
+                clarification_prompt=self._clarification_prompt(text, reason),
+                confidence=0.9,
+                signals=[f"underspecified:{reason}"],
+            )
 
         quoted = self._quoted_phrases(text)
         identifiers = self._identifiers(text)
@@ -201,6 +280,87 @@ class QueryUnderstanding:
             suggested_hops=hops,
             confidence=confidence,
             signals=signals,
+        )
+
+    # --------------------------------------------------------- underspecified
+    @staticmethod
+    def _is_underspecified(text: str) -> tuple[bool, str]:
+        """Whether the query names nothing retrievable on its own.
+
+        Deliberately narrow. A bare topic word like "treatment" still retrieves
+        usefully, so only queries that are genuinely unresolvable qualify:
+        anaphora with no antecedent, continuations with nothing to continue, and
+        category words naming no entity.
+        """
+        stripped = text.strip().strip("?!.").lower()
+        words = stripped.split()
+
+        if _ANAPHORIC_PHRASE.match(text):
+            return True, "anaphora_without_antecedent"
+
+        if len(words) == 1:
+            word = words[0]
+            if word in _ANAPHORIC:
+                return True, "anaphora_without_antecedent"
+            if word in _CONTINUATION:
+                return True, "continuation_without_prior_turn"
+            if word in _BARE_CATEGORY:
+                return True, "category_without_entity"
+
+        # Two-word forms of the same problem: "more herbs", "other treatments".
+        if len(words) == 2 and words[0] in _CONTINUATION and words[1] in _BARE_CATEGORY:
+            return True, "category_without_entity"
+
+        return False, ""
+
+    @staticmethod
+    def _resolve_from_context(
+        text: str, context: Optional[Sequence[str]]
+    ) -> Optional[str]:
+        """Rewrite an underspecified query using the previous turn.
+
+        Only the most recent turn is used: an anaphor refers to what was just
+        said, and reaching further back produces confident nonsense.
+        """
+        if not context:
+            return None
+
+        previous = str(context[-1]).strip()
+        if not previous:
+            return None
+
+        stripped = text.strip().strip("?!.").lower()
+        words = stripped.split()
+
+        # A continuation inherits the previous question wholesale.
+        if words and words[0] in _CONTINUATION:
+            return previous
+
+        # An anaphor is replaced by the previous turn's subject matter.
+        if _ANAPHORIC_PHRASE.match(text) or (words and words[0] in _ANAPHORIC):
+            return previous
+
+        return f"{previous} {text}".strip()
+
+    @staticmethod
+    def _clarification_prompt(text: str, reason: str) -> str:
+        """A question that tells the user what is missing and what to supply."""
+        prompts = {
+            "anaphora_without_antecedent": (
+                f"I'm not sure what \"{text.strip()}\" refers to. "
+                "Could you name the topic you'd like to know about?"
+            ),
+            "continuation_without_prior_turn": (
+                "There's no previous question for me to continue from. "
+                "What would you like to know more about?"
+            ),
+            "category_without_entity": (
+                f"\"{text.strip()}\" covers a lot of ground. "
+                "Could you narrow it down — a specific item, or what you want to know about it?"
+            ),
+        }
+        return prompts.get(
+            reason, "Could you rephrase that with a bit more detail?"
         )
 
     # ------------------------------------------------------------------ parts

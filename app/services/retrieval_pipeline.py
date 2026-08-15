@@ -48,6 +48,7 @@ class RetrievalPipeline:
         top_k: int = 5,
         max_depth: Optional[int] = None,
         context_budget_tokens: Optional[int] = None,
+        conversation_context: Optional[Sequence[str]] = None,
     ) -> Dict[str, Any]:
         telemetry = TelemetryTracker()
         tenant_id = ctx.tenant_id
@@ -57,11 +58,21 @@ class RetrievalPipeline:
 
         # ---------------------------------------------------- query understanding
         t0 = time.perf_counter()
-        analysis = query_understanding.analyze(safe_query)
+        analysis = query_understanding.analyze(safe_query, conversation_context)
+        telemetry.record_step_latency("query_understanding", (time.perf_counter() - t0) * 1000)
+
+        # An underspecified query is answered with a question, not a guess.
+        # Retrieving something plausible would present a coin flip as an answer.
+        if analysis.needs_clarification:
+            return self._clarification_response(ctx, analysis, telemetry)
+
+        # A query resolved from conversation context is retrieved as its resolved
+        # form; the original is preserved in diagnostics.
+        safe_query = analysis.effective_query
+
         plan = retrieval_router.plan(analysis, top_k=top_k)
         if max_depth is not None:
             plan.graph_depth = min(max_depth, settings.MAX_TRAVERSAL_DEPTH)
-        telemetry.record_step_latency("query_understanding", (time.perf_counter() - t0) * 1000)
 
         # ---------------------------------------------------- entity linking
         t1 = time.perf_counter()
@@ -188,6 +199,48 @@ class RetrievalPipeline:
             "chunks": optimized.chunks,
             "linked_entities": linked,
             "telemetry": telemetry_output,
+        }
+
+    # ------------------------------------------------------------ clarification
+    @staticmethod
+    def _clarification_response(
+        ctx: TenantContext, analysis: QueryAnalysis, telemetry: TelemetryTracker
+    ) -> Dict[str, Any]:
+        """Return a clarification request instead of retrieved content.
+
+        Shaped like a normal response so callers need no special handling: the
+        prompt arrives as a passage, and `needs_clarification` in diagnostics
+        tells a caller that wants to distinguish them.
+        """
+        output = telemetry.finalize()
+        output["retrieval_diagnostics"] = {
+            "query_analysis": analysis.to_dict(),
+            "retrieval_plan": {"intent": "clarify", "active_paths": []},
+            "linked_entities": [],
+            "seed_entity_count": 0,
+            "vector_hits": 0,
+            "lexical_hits": 0,
+            "graph_nodes": 0,
+            "graph_edges": 0,
+            "graph_chunk_hits": 0,
+            "expansion_nodes": 0,
+            "expansion_chunks": 0,
+            "community_hits": 0,
+            "fallback_used": False,
+            "needs_clarification": True,
+            "context": {"passages": 1, "total_tokens": 0, "budget_tokens": 0},
+            "semantic_embeddings": embedding_service.is_semantic,
+            "cross_encoder_active": reranker_service.has_cross_encoder,
+        }
+        return {
+            "subgraph": Subgraph(),
+            "passages": [analysis.clarification_prompt],
+            "citations": ["clarification request"],
+            "chunks": [],
+            "linked_entities": [],
+            "needs_clarification": True,
+            "clarification_prompt": analysis.clarification_prompt,
+            "telemetry": output,
         }
 
     # ------------------------------------------------------------------ paths
