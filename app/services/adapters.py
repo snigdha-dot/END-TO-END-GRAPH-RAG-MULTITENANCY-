@@ -373,21 +373,40 @@ class RichAdapter:
         if self._converter is None:
             try:
                 from docling.document_converter import DocumentConverter  # noqa: PLC0415
-            except ImportError as exc:
+
+                self._converter = DocumentConverter()
+            except Exception as exc:  # noqa: BLE001
+                # Not just ImportError: Docling's native dependencies (rtree,
+                # torch) raise OSError when their runtime DLLs are missing, which
+                # is a broken install rather than an absent one. Both mean the
+                # same thing to the caller.
                 raise RuntimeError(
-                    "Reading PDF/DOCX/PPTX/HTML requires Docling: pip install docling\n"
-                    "Alternatively convert the file to .txt, .md, or .csv first."
+                    f"Docling unavailable ({type(exc).__name__}: {exc}). "
+                    "Install with: pip install docling"
                 ) from exc
-            self._converter = DocumentConverter()
         return self._converter
 
     def to_document(self, path: Path, prose_parser: ProseParser) -> CanonicalDocument:
         """Convert to markdown, then reuse the prose parser for block structure.
 
         Docling preserves tables as markdown tables, so the prose parser's table
-        handling recovers them as TABLE blocks rather than flattening them.
+        handling recovers them as TABLE blocks rather than flattening them. When
+        Docling is unavailable, PDFs fall back to plain text extraction: layout
+        and table structure are lost, but the text is still retrievable, which
+        beats refusing the document entirely.
         """
-        result = self._get_converter().convert(str(path))
+        try:
+            converter = self._get_converter()
+        except RuntimeError as exc:
+            if path.suffix.lower() == ".pdf":
+                logger.warning(
+                    "Docling unavailable (%s); extracting %s as plain text without "
+                    "table structure.", exc, path.name,
+                )
+                return self._pdf_text_fallback(path, prose_parser)
+            raise
+
+        result = converter.convert(str(path))
         markdown = result.document.export_to_markdown()
         if not markdown.strip():
             return CanonicalDocument(
@@ -407,6 +426,62 @@ class RichAdapter:
             block.provenance.extractor = "docling"
         document.provenance.extractor = "docling"
         return document
+
+    def _pdf_text_fallback(
+        self, path: Path, prose_parser: ProseParser
+    ) -> CanonicalDocument:
+        """Extract PDF text with pypdf, preserving page numbers as provenance.
+
+        Page numbers matter more here than elsewhere: without Docling's layout
+        model there is no section structure to cite, so the page is the only
+        precise reference a returned passage can carry.
+        """
+        try:
+            from pypdf import PdfReader  # noqa: PLC0415
+        except ImportError as exc:
+            raise RuntimeError(
+                "Reading PDF requires either Docling or pypdf: pip install pypdf"
+            ) from exc
+
+        reader = PdfReader(str(path))
+        blocks: List[ContentBlock] = []
+        counter = 0
+
+        for page_number, page in enumerate(reader.pages, start=1):
+            try:
+                text = page.extract_text() or ""
+            except Exception as exc:  # noqa: BLE001 - one bad page must not abort
+                logger.warning("Could not extract page %d of %s: %s", page_number, path.name, exc)
+                continue
+
+            for para in re.split(r"\n\s*\n", text):
+                para = para.strip()
+                if len(para) < 20:
+                    continue
+                counter += 1
+                blocks.append(
+                    ContentBlock(
+                        block_id=f"{_slug(path.stem)}_p{page_number}_b{counter}",
+                        kind=BlockKind.PROSE,
+                        text=para,
+                        provenance=Provenance(
+                            source_uri=str(path),
+                            source_format="pdf",
+                            page=page_number,
+                            extractor="pypdf",
+                        ),
+                    )
+                )
+
+        return CanonicalDocument(
+            doc_id=f"doc_{_slug(path.stem)}",
+            title=path.stem,
+            blocks=blocks,
+            provenance=Provenance(
+                source_uri=str(path), source_format="pdf", extractor="pypdf"
+            ),
+            metadata={"pages": len(reader.pages), "extractor": "pypdf"},
+        )
 
 
 # ------------------------------------------------------------------ orchestration
