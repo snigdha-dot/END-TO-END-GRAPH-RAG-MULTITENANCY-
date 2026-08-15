@@ -56,6 +56,10 @@ _WORD_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9'’\-]*")
 class HybridRetrievalService:
     """Executes the four-stage hybrid retrieval pipeline for one tenant."""
 
+    def __init__(self) -> None:
+        # tenant_id -> whether native HNSW KNN works. None until probed.
+        self._native_knn_available: Dict[str, bool] = {}
+
     # ------------------------------------------------- Stage 1: entity linking
     def _candidate_mentions(self, query: str) -> List[str]:
         """Extract plausible entity mentions from the query.
@@ -190,6 +194,11 @@ class HybridRetrievalService:
         chunks in-process when the ArcadeDB build lacks HNSW support.
         """
         knn_limit = max(top_k * 3, 15)
+        # Probe the native path once per tenant. ArcadeDB 24.11.1 does not expose
+        # HNSW index creation through SQL DDL, so retrying a query that cannot
+        # succeed would cost one failed round-trip on every single search.
+        if self._native_knn_available.get(tenant_id) is False:
+            return await self._vector_search_fallback(query_vector, tenant_id, top_k)
         try:
             rows = await arcadedb_client.execute_sql(
                 "SELECT chunk_id, text, parent_doc_id, section_path, "
@@ -200,11 +209,16 @@ class HybridRetrievalService:
             )
             chunks = self._parse_knn_rows(rows, top_k)
             if chunks:
+                self._native_knn_available[tenant_id] = True
                 return chunks
         except (DatabaseQueryError, DatabaseConnectionError) as exc:
             if isinstance(exc, DatabaseConnectionError):
                 raise
-            logger.debug("Native KNN unavailable (%s); scoring chunks in-process.", exc.detail)
+            self._native_knn_available[tenant_id] = False
+            logger.info(
+                "Native HNSW KNN unavailable for '%s' (%s); using in-process cosine "
+                "scoring for this tenant.", tenant_id, exc.detail,
+            )
 
         return await self._vector_search_fallback(query_vector, tenant_id, top_k)
 
@@ -531,6 +545,7 @@ class HybridRetrievalService:
             "graph_chunk_hits": len(graph_chunks),
             "fallback_used": fallback_used,
             "graph_path_disabled": disable_graph_path,
+            "native_hnsw_knn": self._native_knn_available.get(tenant_id),
             "semantic_embeddings": embedding_service.is_semantic,
             "cross_encoder_active": reranker_service.has_cross_encoder,
         }

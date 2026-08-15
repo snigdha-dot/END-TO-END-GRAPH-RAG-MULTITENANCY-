@@ -43,8 +43,11 @@ class GraphSchemaService:
         created["edge_types"] = sorted(schema.edge_types)
 
         for statement, label in self._index_statements(schema):
-            await self._execute_ddl(statement, tenant_id)
-            created["indexes"].append(label)
+            succeeded = await self._execute_ddl(statement, tenant_id)
+            if succeeded:
+                created["indexes"].append(label)
+            else:
+                created.setdefault("indexes_unavailable", []).append(label)
 
         logger.info(
             "Provisioned schema for tenant '%s': %d vertex types, %d edge types, %d indexes",
@@ -139,26 +142,32 @@ class GraphSchemaService:
         if not is_safe_identifier(value):
             raise SchemaValidationError(f"Unsafe {kind} rejected before DDL: {value!r}")
 
-    async def _execute_ddl(self, statement: str, tenant_id: str) -> None:
-        """Run one DDL statement, tolerating 'already exists' but not real errors."""
+    async def _execute_ddl(self, statement: str, tenant_id: str) -> bool:
+        """Run one DDL statement. Returns True when the object exists afterwards.
+
+        Tolerates 'already exists'; reports HNSW unavailability rather than raising,
+        since vector search degrades to in-process cosine scoring.
+        """
         try:
             await arcadedb_client.execute_sql(
                 statement, tenant_id=tenant_id, timeout_ms=settings.ARCADEDB_DDL_TIMEOUT_MS
             )
+            return True
         except DatabaseQueryError as exc:
             detail = str(exc.detail).lower()
             body = str(exc.context.get("body", "")).lower()
             benign = ("already exists", "duplicated", "existing index")
             if any(marker in detail or marker in body for marker in benign):
-                return
-            # HNSW support varies across ArcadeDB builds. Vector search degrades to
-            # sequential cosine scoring, so this must not block provisioning.
+                return True
+            # HNSW support varies across ArcadeDB builds; 24.11.1 does not expose
+            # vector index creation through SQL DDL. Returning False keeps the
+            # provisioning report honest instead of claiming an index that is absent.
             if "hnsw" in statement.lower():
                 logger.warning(
-                    "HNSW index creation failed for tenant '%s' (%s). Vector search will "
-                    "use in-memory cosine scoring.", tenant_id, exc.detail,
+                    "HNSW index unavailable for tenant '%s' (%s). Vector search will use "
+                    "in-process cosine scoring.", tenant_id, exc.detail,
                 )
-                return
+                return False
             raise
 
     async def verify_schema(self, tenant_id: str) -> dict:
