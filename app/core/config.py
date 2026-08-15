@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     # Plan section 2.2 mandates a 3000ms query timeout.
     ARCADEDB_QUERY_TIMEOUT_MS: int = 3000
     ARCADEDB_CONNECT_TIMEOUT_MS: int = 2000
+    # Schema DDL and index builds are far slower than queries, especially on first
+    # creation. They are admin-path operations, so the tight query bound does not apply.
+    ARCADEDB_DDL_TIMEOUT_MS: int = 60000
+    # Ingestion writes tolerate more than the read path: the Cypher engine has a
+    # multi-second first-call warmup, and writes are not on the user-facing path.
+    ARCADEDB_WRITE_TIMEOUT_MS: int = 30000
     ARCADEDB_MAX_CONNECTIONS: int = 50
     ARCADEDB_MAX_KEEPALIVE: int = 20
     # Ingestion writes are batched into a single scripted request of this size.

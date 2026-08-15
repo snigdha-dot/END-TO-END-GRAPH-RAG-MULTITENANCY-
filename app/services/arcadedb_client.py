@@ -40,6 +40,9 @@ class ArcadeDBClient:
         self._lock = asyncio.Lock()
         # Databases confirmed to exist, so we stop re-checking on every query.
         self._known_databases: set[str] = set()
+        # None = not yet probed. Set on first batch attempt so an unsupported
+        # endpoint costs one 404 rather than one per batch.
+        self._batch_endpoint_available: Optional[bool] = None
 
     # ------------------------------------------------------------------ lifecycle
     async def start(self) -> None:
@@ -79,7 +82,8 @@ class ArcadeDBClient:
         try:
             client = await self._get_client()
             resp = await client.get(f"{self.base_url}/api/v1/ready")
-            return resp.status_code == 200
+            # ArcadeDB answers 204 No Content when healthy.
+            return resp.status_code in (200, 204)
         except Exception as exc:  # noqa: BLE001 - probe must not propagate
             logger.warning("ArcadeDB readiness probe failed: %s", exc)
             return False
@@ -87,16 +91,20 @@ class ArcadeDBClient:
     # ------------------------------------------------------------------ requests
     async def _request(
         self, method: str, url: str, *, json_body: Optional[Dict[str, Any]] = None,
-        retry: bool = True,
+        retry: bool = True, timeout_ms: Optional[int] = None,
     ) -> httpx.Response:
         """Perform an HTTP call, translating transport faults into typed errors."""
         client = await self._get_client()
         attempts = 2 if retry else 1
         last_exc: Optional[Exception] = None
+        effective_timeout = timeout_ms or settings.ARCADEDB_QUERY_TIMEOUT_MS
+        request_timeout = httpx.Timeout(
+            effective_timeout / 1000.0, connect=settings.connect_timeout_seconds
+        )
 
         for attempt in range(attempts):
             try:
-                resp = await client.request(method, url, json=json_body)
+                resp = await client.request(method, url, json=json_body, timeout=request_timeout)
                 if resp.status_code in _RETRYABLE_STATUS and attempt < attempts - 1:
                     await asyncio.sleep(0.15 * (attempt + 1))
                     continue
@@ -107,7 +115,7 @@ class ArcadeDBClient:
                     await asyncio.sleep(0.15 * (attempt + 1))
                     continue
                 raise DatabaseConnectionError(
-                    f"ArcadeDB request timed out after {settings.ARCADEDB_QUERY_TIMEOUT_MS}ms.",
+                    f"ArcadeDB request timed out after {effective_timeout}ms.",
                     url=url,
                 ) from exc
             except httpx.HTTPError as exc:
@@ -248,6 +256,7 @@ class ArcadeDBClient:
         *,
         tenant_id: Optional[str] = None,
         language: str = "cypher",
+        timeout_ms: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """Execute a parameterized query against the bound tenant's database.
 
@@ -272,14 +281,18 @@ class ArcadeDBClient:
                 "params": params or {},
                 "limit": settings.MAX_TRAVERSAL_NODES,
             },
+            timeout_ms=timeout_ms,
         )
         return self._extract_result(resp, db_name=db_name, query=cypher_query)
 
     async def execute_sql(
-        self, sql: str, params: Optional[Dict[str, Any]] = None, *, tenant_id: Optional[str] = None
+        self, sql: str, params: Optional[Dict[str, Any]] = None, *,
+        tenant_id: Optional[str] = None, timeout_ms: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """Execute ArcadeDB SQL — needed for schema/index DDL, which Cypher lacks."""
-        return await self.execute_cypher(sql, params, tenant_id=tenant_id, language="sql")
+        return await self.execute_cypher(
+            sql, params, tenant_id=tenant_id, language="sql", timeout_ms=timeout_ms
+        )
 
     async def execute_batch(
         self,
@@ -288,11 +301,16 @@ class ArcadeDBClient:
         tenant_id: Optional[str] = None,
         language: str = "cypher",
     ) -> int:
-        """Execute many write statements in batched transactions.
+        """Execute many write statements, batching where the server supports it.
 
-        One HTTP round-trip per vertex made ingestion O(n) network calls; a document
-        with 300 entities took minutes. This sends `ARCADEDB_WRITE_BATCH_SIZE`
-        statements per request via the batch endpoint.
+        One HTTP round-trip per vertex made ingestion O(n) network calls. Where a
+        server-side batch mechanism exists it is used; otherwise statements are
+        executed sequentially so ingestion still completes correctly.
+
+        Note on ArcadeDB 24.x: `/api/v1/batch/{db}` is not present in all builds,
+        and the `sqlscript` language does not accept bound parameters. Since
+        parameter binding is a security requirement here, not a convenience, the
+        sequential path is used rather than interpolating values into a script.
         """
         if not statements:
             return 0
@@ -304,40 +322,50 @@ class ArcadeDBClient:
             tenant_id = ctx.tenant_id
 
         db_name = await self.resolve_database(tenant_id)
-        batch_size = max(1, settings.ARCADEDB_WRITE_BATCH_SIZE)
         executed = 0
 
-        for start in range(0, len(statements), batch_size):
-            chunk = statements[start : start + batch_size]
-            commands = [
-                {
-                    "language": language,
-                    "command": stmt["command"],
-                    "params": stmt.get("params", {}),
-                }
-                for stmt in chunk
-            ]
-            resp = await self._request(
-                "POST",
-                f"{self.base_url}/api/v1/batch/{db_name}",
-                json_body={"operations": commands},
-                retry=False,
-            )
-            if resp.status_code not in (200, 201, 204):
-                # Fall back to sequential execution when the batch endpoint is
-                # unavailable on this ArcadeDB build, so ingestion still succeeds.
-                logger.warning(
-                    "Batch endpoint returned HTTP %s; falling back to sequential writes.",
+        if self._batch_endpoint_available is not False:
+            batch_size = max(1, settings.ARCADEDB_WRITE_BATCH_SIZE)
+            for start in range(0, len(statements), batch_size):
+                chunk = statements[start : start + batch_size]
+                commands = [
+                    {
+                        "language": language,
+                        "command": stmt["command"],
+                        "params": stmt.get("params", {}),
+                    }
+                    for stmt in chunk
+                ]
+                resp = await self._request(
+                    "POST",
+                    f"{self.base_url}/api/v1/batch/{db_name}",
+                    json_body={"operations": commands},
+                    retry=False,
+                    timeout_ms=settings.ARCADEDB_WRITE_TIMEOUT_MS,
+                )
+                if resp.status_code in (200, 201, 204):
+                    self._batch_endpoint_available = True
+                    executed += len(chunk)
+                    continue
+
+                # Probe once, then remember, so we do not pay a 404 per batch.
+                logger.info(
+                    "Batch endpoint unavailable (HTTP %s); using sequential writes.",
                     resp.status_code,
                 )
-                for stmt in chunk:
-                    await self.execute_cypher(
-                        stmt["command"], stmt.get("params", {}),
-                        tenant_id=tenant_id, language=language,
-                    )
-                    executed += 1
-                continue
-            executed += len(chunk)
+                self._batch_endpoint_available = False
+                break
+
+        if executed == 0:
+            for stmt in statements:
+                await self.execute_cypher(
+                    stmt["command"],
+                    stmt.get("params", {}),
+                    tenant_id=tenant_id,
+                    language=language,
+                    timeout_ms=settings.ARCADEDB_WRITE_TIMEOUT_MS,
+                )
+                executed += 1
 
         return executed
 

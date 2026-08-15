@@ -106,10 +106,17 @@ class CypherParameterizer:
         requested = rel_types if rel_types is not None else schema.traversal_edges()
         rel_fragment = cls.safe_edge_fragment(requested, schema)
 
+        # ArcadeDB's Cypher layer does not implement the path functions
+        # `nodes(path)` / `relationships(path)`, so endpoints and the relationship
+        # type are projected directly. Variable-length matching itself is supported,
+        # so multi-hop traversal is unaffected.
         cypher = (
-            f"MATCH path = (start)-[{rel_fragment}*1..{safe_depth}]-(related) "
+            f"MATCH (start)-[rel{rel_fragment}*1..{safe_depth}]-(related) "
             "WHERE start.entity_id IN $start_nodes "
-            "RETURN nodes(path) AS nodes, relationships(path) AS edges, length(path) AS hops "
+            "RETURN start.entity_id AS source_id, start.name AS source_name, "
+            "start.entity_label AS source_label, "
+            "related.entity_id AS target_id, related.name AS target_name, "
+            "related.entity_label AS target_label "
             "LIMIT $limit"
         )
         params: Dict[str, Any] = {"start_nodes": list(start_node_ids), "limit": safe_limit}
@@ -117,11 +124,17 @@ class CypherParameterizer:
 
     @classmethod
     def build_entity_candidate_lookup(cls, names: List[str], limit: int = 25) -> Tuple[str, Dict[str, Any]]:
-        """Look up canonical entities by normalized name or alias (fully parameterized)."""
+        """Look up canonical entities by normalized name (fully parameterized).
+
+        Alias matching is deliberately not expressed here: ArcadeDB's Cypher layer
+        rejects `ANY(a IN e.aliases WHERE ...)` list predicates. Aliases are returned
+        with each candidate and matched in `resolution_service`, which also applies
+        Jaro-Winkler and vector scoring — so recall is unaffected.
+        """
         cypher = (
             "MATCH (e) "
-            "WHERE e.normalized_name IN $names OR ANY(a IN e.aliases WHERE a IN $names) "
-            "RETURN e.entity_id AS entity_id, e.name AS name, e.label AS label, "
+            "WHERE e.normalized_name IN $names "
+            "RETURN e.entity_id AS entity_id, e.name AS name, e.entity_label AS label, "
             "e.normalized_name AS normalized_name, e.aliases AS aliases "
             "LIMIT $limit"
         )

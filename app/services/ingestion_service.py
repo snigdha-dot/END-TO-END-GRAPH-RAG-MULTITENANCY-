@@ -218,10 +218,13 @@ class IngestionService:
             statements.append(
                 {
                     "command": (
+                        # `label` is a reserved TinkerPop token and cannot be set as a
+                        # property; the vertex type already carries it, and it is
+                        # stored as `entity_label` for retrieval-side convenience.
                         f"MERGE (n:{label} {{entity_id: $entity_id}}) "
                         "SET n.name = $name, n.normalized_name = $normalized_name, "
                         "n.aliases = $aliases, n.confidence = $confidence, "
-                        "n.mention_count = $mention_count, n.label = $label"
+                        "n.mention_count = $mention_count, n.entity_label = $entity_label"
                     ),
                     "params": {
                         "entity_id": vertex.id,
@@ -230,7 +233,7 @@ class IngestionService:
                         "aliases": vertex.properties.get("aliases", []),
                         "confidence": float(vertex.properties.get("confidence", 0.5)),
                         "mention_count": int(vertex.properties.get("mention_count", 1)),
-                        "label": label,
+                        "entity_label": label,
                     },
                 }
             )

@@ -84,6 +84,14 @@ class GraphSchemaService:
                     f"{label}.normalized_name",
                 )
             )
+            # Stored as `entity_label` because `label` is a reserved TinkerPop token
+            # and cannot be written as a vertex property.
+            statements.append(
+                (
+                    f"CREATE PROPERTY {label}.entity_label IF NOT EXISTS STRING",
+                    f"{label}.entity_label",
+                )
+            )
             # UNIQUE on entity_id is what makes canonical merging safe under concurrency.
             statements.append(
                 (
@@ -134,7 +142,9 @@ class GraphSchemaService:
     async def _execute_ddl(self, statement: str, tenant_id: str) -> None:
         """Run one DDL statement, tolerating 'already exists' but not real errors."""
         try:
-            await arcadedb_client.execute_sql(statement, tenant_id=tenant_id)
+            await arcadedb_client.execute_sql(
+                statement, tenant_id=tenant_id, timeout_ms=settings.ARCADEDB_DDL_TIMEOUT_MS
+            )
         except DatabaseQueryError as exc:
             detail = str(exc.detail).lower()
             body = str(exc.context.get("body", "")).lower()

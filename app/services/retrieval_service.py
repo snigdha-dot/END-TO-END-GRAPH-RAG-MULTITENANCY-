@@ -118,6 +118,23 @@ class HybridRetrievalService:
         cypher, params = CypherParameterizer.build_entity_candidate_lookup(lookup_names, limit=60)
         rows = await arcadedb_client.execute_cypher(cypher, params, tenant_id=tenant_id)
 
+        # Exact normalized-name matching can miss an entity known only by an alias.
+        # A bounded second pass widens the candidate pool; scoring still decides.
+        if len(rows) < len(mentions):
+            widened = await arcadedb_client.execute_cypher(
+                "MATCH (e) WHERE e.normalized_name IS NOT NULL "
+                "RETURN e.entity_id AS entity_id, e.name AS name, e.entity_label AS label, "
+                "e.normalized_name AS normalized_name, e.aliases AS aliases "
+                "LIMIT $limit",
+                {"limit": settings.MAX_TRAVERSAL_NODES * 2},
+                tenant_id=tenant_id,
+            )
+            seen_widened = {r.get("entity_id") for r in rows if isinstance(r, dict)}
+            rows = list(rows) + [
+                r for r in widened
+                if isinstance(r, dict) and r.get("entity_id") not in seen_widened
+            ]
+
         candidates: List[Dict[str, Any]] = []
         for row in rows:
             if not isinstance(row, dict):
@@ -274,56 +291,81 @@ class HybridRetrievalService:
             start_node_ids=seed_ids, max_depth=max_depth, schema=ctx.schema
         )
         rows = await arcadedb_client.execute_cypher(cypher, params, tenant_id=tenant_id)
-        return self._parse_traversal(rows)
+        subgraph = self._parse_traversal(rows)
+
+        # The traversal projects endpoints only, because ArcadeDB's Cypher layer has
+        # no path functions. A second bounded query recovers the typed relationships
+        # between the reached nodes, which is what carries the multi-hop answer.
+        if subgraph.nodes:
+            node_ids = [n.id for n in subgraph.nodes][: settings.MAX_TRAVERSAL_NODES]
+            edge_rows = await arcadedb_client.execute_cypher(
+                "MATCH (a)-[r]->(b) "
+                "WHERE a.entity_id IN $ids AND b.entity_id IN $ids "
+                "RETURN a.entity_id AS source_id, type(r) AS rel_type, "
+                "b.entity_id AS target_id, r.confidence AS confidence "
+                "LIMIT $limit",
+                {"ids": node_ids, "limit": settings.MAX_TRAVERSAL_NODES},
+                tenant_id=tenant_id,
+            )
+            subgraph = Subgraph(
+                nodes=subgraph.nodes, edges=self._parse_edges(edge_rows)
+            )
+
+        return subgraph
 
     def _parse_traversal(self, rows: List[Dict[str, Any]]) -> Subgraph:
+        """Parse the endpoint-projection rows returned by the traversal query."""
         nodes: List[Vertex] = []
-        edges: List[Edge] = []
         seen_nodes: set[str] = set()
-        seen_edges: set[Tuple[str, str, str]] = set()
+
+        def add(node_id: Any, name: Any, label: Any) -> None:
+            if not node_id or str(node_id) in seen_nodes:
+                return
+            seen_nodes.add(str(node_id))
+            nodes.append(
+                Vertex(
+                    id=str(node_id),
+                    label=str(label or "Entity"),
+                    properties={"entity_id": str(node_id), "name": str(name or node_id)},
+                )
+            )
 
         for row in rows:
             if not isinstance(row, dict):
                 continue
+            add(row.get("source_id"), row.get("source_name"), row.get("source_label"))
+            add(row.get("target_id"), row.get("target_name"), row.get("target_label"))
 
-            for node in row.get("nodes") or []:
-                if not isinstance(node, dict):
-                    continue
-                node_id = node.get("entity_id") or node.get("id") or node.get("@rid")
-                if not node_id or str(node_id) in seen_nodes:
-                    continue
-                seen_nodes.add(str(node_id))
-                properties = {k: v for k, v in node.items() if k != "embedding"}
-                nodes.append(
-                    Vertex(
-                        id=str(node_id),
-                        label=str(node.get("@type") or node.get("@class") or node.get("label") or "Entity"),
-                        properties=properties,
-                    )
+        return Subgraph(nodes=nodes, edges=[])
+
+    @staticmethod
+    def _parse_edges(rows: List[Dict[str, Any]]) -> List[Edge]:
+        """Parse typed relationships between already-retrieved nodes."""
+        edges: List[Edge] = []
+        seen: set[Tuple[str, str, str]] = set()
+
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            source = row.get("source_id")
+            target = row.get("target_id")
+            rel_type = str(row.get("rel_type") or "RELATED_TO")
+            if not source or not target:
+                continue
+            key = (str(source), rel_type, str(target))
+            if key in seen:
+                continue
+            seen.add(key)
+            confidence = row.get("confidence")
+            edges.append(
+                Edge(
+                    source=str(source),
+                    target=str(target),
+                    type=rel_type,
+                    properties={"confidence": float(confidence) if confidence is not None else 1.0},
                 )
-
-            for edge in row.get("edges") or []:
-                if not isinstance(edge, dict):
-                    continue
-                source = edge.get("source") or edge.get("out") or edge.get("@out")
-                target = edge.get("target") or edge.get("in") or edge.get("@in")
-                etype = str(edge.get("@type") or edge.get("@class") or edge.get("type") or "RELATED_TO")
-                if not source or not target:
-                    continue
-                key = (str(source), etype, str(target))
-                if key in seen_edges:
-                    continue
-                seen_edges.add(key)
-                edges.append(
-                    Edge(
-                        source=str(source),
-                        target=str(target),
-                        type=etype,
-                        properties={k: v for k, v in edge.items() if k != "embedding"},
-                    )
-                )
-
-        return Subgraph(nodes=nodes, edges=edges)
+            )
+        return edges
 
     async def _chunks_for_entities(
         self, entity_ids: Sequence[str], tenant_id: str, limit: int
