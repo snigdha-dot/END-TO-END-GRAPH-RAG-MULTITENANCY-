@@ -25,6 +25,8 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 from app.core.config import settings
 from app.core.tenant_schema import TenantGraphSchema
 from app.models.graph import Edge, Vertex
+from app.services.relation_patterns import RelationExtractor
+from app.services.type_inference import TypeInferencer
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +129,38 @@ _STOPWORD_TITLES = {
     "introduction", "overview", "summary", "conclusion", "references", "contents",
     "abstract", "background", "plot", "cast", "reception", "production", "notes",
 }
+
+# Sentence openers, connectives, and section furniture that survive the
+# capitalization heuristic but are never entities.
+_NON_ENTITY_WORDS = {
+    "however", "although", "therefore", "moreover", "furthermore", "meanwhile",
+    "nevertheless", "additionally", "consequently", "subsequently", "similarly",
+    "instead", "despite", "while", "when", "where", "after", "before", "during",
+    "following", "according", "based", "using", "several", "many", "most", "some",
+    "other", "another", "both", "each", "such", "these", "those", "there", "here",
+    "他", "his", "her", "their", "they", "he", "she", "we", "you", "who", "what",
+    "in", "on", "at", "to", "for", "with", "by", "from", "as", "is", "was", "were",
+    "development", "release", "critical", "commercial", "critical response",
+    "see also", "external links", "further reading", "citation", "retrieved",
+    "archived", "original", "isbn", "doi", "pp", "vol", "ed", "et al",
+}
+
+# A predicate that marks the preceding capitalized word as a real subject rather
+# than a sentence opener: "Inception is a 2010 film", "GPT-4 was released by...".
+_SUBJECT_PREDICATE = re.compile(
+    r"^\s+(?:is|was|are|were|has|have|had|became|remains|features|stars|"
+    r"received|premiered|grossed|introduced|outperforms|builds|uses|supersedes|"
+    r"consists|refers|marks|won|earned)\b",
+    re.IGNORECASE,
+)
+
+# Dates, standalone years, and month names.
+_DATE_LIKE = re.compile(
+    r"^(?:\d{1,4}|January|February|March|April|May|June|July|August|September|"
+    r"October|November|December|Monday|Tuesday|Wednesday|Thursday|Friday|"
+    r"Saturday|Sunday)(?:\s+\d{1,4})?$",
+    re.IGNORECASE,
+)
 
 
 def normalize_entity_name(name: str) -> str:
@@ -261,29 +295,79 @@ class ExtractionService:
         return out
 
     def _extract_regex(self, text: str, schema: TenantGraphSchema) -> List[Dict[str, Any]]:
-        """Capitalized-phrase heuristic, filtered against section-header noise."""
-        default_label = self._default_label(schema)
-        out: List[Dict[str, Any]] = []
-        seen: set[str] = set()
+        """Capitalized-phrase heuristic with contextual type inference.
 
+        Every occurrence is kept (not just the first), because relation extraction
+        needs each mention's position to pair entities with the verb between them.
+        Types come from `TypeInferencer` rather than a single default: a shared
+        default made every entity the same label, which broke label-scoped ids and
+        caused schema-valid relations to be rejected.
+        """
+        default_label = self._default_label(schema)
+        raw: List[Dict[str, Any]] = []
+
+        # Greedily match consecutive capitalized tokens as ONE mention, optionally
+        # joined by a lowercase connective ("Warner Bros. of America"). Matching
+        # token-by-token split "Christopher Nolan" into two separate Person nodes.
         for match in re.finditer(
-            r"\b[A-Z][a-zA-Z0-9'’\-]{1,30}(?:\s+[A-Z][a-zA-Z0-9'’\-]{1,30}){0,4}\b", text
+            # `[ \t]` rather than `\s`: a newline ends a mention, and a trailing
+            # period ends it too, so "Michael Caine.\nAfter" is one entity, not two
+            # words glued together.
+            r"\b[A-Z][a-zA-Z0-9'’\-]*"
+            r"(?:[ \t]+(?:of|the|and|de|von|van|di|da)[ \t]+[A-Z][a-zA-Z0-9'’\-]*"
+            r"|[ \t]+[A-Z][a-zA-Z0-9'’\-]*){0,4}",
+            text,
         ):
-            name = match.group(0).strip()
-            if len(name) < 3 or name.lower() in _STOPWORD_TITLES:
+            name = match.group(0).strip().rstrip(",;:.")
+            if not self._plausible_entity(name, text, match.start()):
                 continue
-            # A single capitalized word at sentence start is usually not an entity.
-            if " " not in name and match.start() > 0 and text[match.start() - 2 : match.start()].strip().endswith("."):
-                continue
-            key = normalize_entity_name(name)
-            if not key or key in seen:
-                continue
-            seen.add(key)
-            out.append(
-                {"name": name, "label": default_label, "confidence": 0.55,
-                 "start": match.start(), "end": match.end()}
+            raw.append(
+                {
+                    "name": name,
+                    "label": default_label,
+                    "confidence": 0.55,
+                    "start": match.start(),
+                    "end": match.start() + len(name),
+                }
             )
-        return out
+
+        if not raw:
+            return []
+
+        inferencer = TypeInferencer(schema)
+        return inferencer.infer_batch(raw, text, default_label)
+
+    @staticmethod
+    def _plausible_entity(name: str, text: str, start: int) -> bool:
+        """Reject the noise that dominates real prose.
+
+        Encyclopedic text is full of capitalized tokens that are not entities:
+        sentence-initial words, headings, month names, and citation furniture.
+        Without this filter the graph fills with 'The', 'However', and 'January'.
+        """
+        if len(name) < 3 or len(name) > 60:
+            return False
+
+        lowered = name.lower()
+        if lowered in _STOPWORD_TITLES or lowered in _NON_ENTITY_WORDS:
+            return False
+        if _DATE_LIKE.match(name):
+            return False
+        # All-caps runs of 1-2 characters are usually initials or artefacts.
+        if name.isupper() and len(name) <= 2:
+            return False
+
+        # A single capitalized word at a sentence boundary is usually a sentence
+        # opener -- but not always: "Inception is a 2010 film" opens with the very
+        # entity the document is about. Rejecting all of them lost every subject
+        # entity, and with it every relation that needed one as an endpoint.
+        # Keep it when the following text defines or predicates it.
+        if " " not in name:
+            preceding = text[max(0, start - 2) : start]
+            at_boundary = start == 0 or preceding.strip().endswith((".", "!", "?", "\n"))
+            if at_boundary and not _SUBJECT_PREDICATE.match(text[start + len(name) :]):
+                return False
+        return True
 
     @staticmethod
     def _default_label(schema: TenantGraphSchema) -> str:
@@ -296,45 +380,28 @@ class ExtractionService:
     def _extract_relations(
         self, text: str, entities: List[Dict[str, Any]], schema: TenantGraphSchema
     ) -> List[Dict[str, Any]]:
-        """Find verb-mediated relations between entity mentions in the same sentence."""
-        patterns = _DOMAIN_RELATION_VERBS.get(schema.domain, _DOMAIN_RELATION_VERBS["generic"])
-        relations: List[Dict[str, Any]] = []
+        """Find typed relations between entity mentions.
 
+        Delegates to `RelationExtractor`, which handles the constructions real prose
+        actually uses: passive voice with an agentive `by`, coordinated object lists,
+        and sentence-bounded pairing. The previous nearest-neighbour heuristic
+        produced 3 edges from a 417,000-character corpus.
+        """
         positioned = [e for e in entities if e.get("start", -1) >= 0]
-        positioned.sort(key=lambda e: e["start"])
+        if len(positioned) < 2:
+            return []
 
-        for verb_pattern, edge_type in patterns:
-            if not schema.validate_edge_type(edge_type):
-                continue
-            for vmatch in re.finditer(rf"\b(?:{verb_pattern})\b", text, re.IGNORECASE):
-                before = [e for e in positioned if e["end"] <= vmatch.start()]
-                after = [e for e in positioned if e["start"] >= vmatch.end()]
-                if not before or not after:
-                    continue
-
-                source = before[-1]
-                target = after[0]
-                # Reject pairs separated by a sentence boundary.
-                span = text[source["end"] : target["start"]]
-                if re.search(r"[.!?]\s", span):
-                    continue
-                if normalize_entity_name(source["name"]) == normalize_entity_name(target["name"]):
-                    continue
-
-                gap = target["start"] - source["end"]
-                confidence = 0.9 if gap <= 60 else 0.82 if gap <= 120 else 0.75
-                relations.append(
-                    {
-                        "source": source["name"],
-                        "source_label": source["label"],
-                        "target": target["name"],
-                        "target_label": target["label"],
-                        "type": edge_type,
-                        "confidence": round(confidence, 2),
-                        "evidence": text[max(0, source["start"]) : min(len(text), target["end"])][:280],
-                    }
-                )
-        return relations
+        extractor = RelationExtractor(schema.domain, schema.edge_types)
+        return [
+            {
+                "source": relation.source_name,
+                "target": relation.target_name,
+                "type": relation.edge_type,
+                "confidence": relation.confidence,
+                "evidence": relation.evidence,
+            }
+            for relation in extractor.extract(text, positioned)
+        ]
 
     # ------------------------------------------------------------------ public
     def extract_from_chunk(
@@ -367,13 +434,26 @@ class ExtractionService:
             by_key[key] = vertex
             vertices.append(vertex)
 
+        # Canonical ids are label-scoped, so an edge endpoint must resolve to the
+        # same label the vertex was created with. Looking it up here keeps edges
+        # pointing at nodes that actually exist.
+        label_by_name = {
+            normalize_entity_name(e["name"]): e["label"] for e in raw_entities
+        }
+
         edges: List[Edge] = []
         seen_edges: set[Tuple[str, str, str]] = set()
         for rel in self._extract_relations(text, raw_entities, schema):
             if rel["confidence"] < settings.EDGE_CONFIDENCE_THRESHOLD:
                 continue
-            src_id = entity_id_for(rel["source"], rel.get("source_label", ""))
-            tgt_id = entity_id_for(rel["target"], rel.get("target_label", ""))
+            src_norm = normalize_entity_name(rel["source"])
+            tgt_norm = normalize_entity_name(rel["target"])
+            src_label = label_by_name.get(src_norm)
+            tgt_label = label_by_name.get(tgt_norm)
+            if not src_label or not tgt_label:
+                continue
+            src_id = entity_id_for(rel["source"], src_label)
+            tgt_id = entity_id_for(rel["target"], tgt_label)
             key = (src_id, rel["type"], tgt_id)
             if src_id == tgt_id or key in seen_edges:
                 continue
