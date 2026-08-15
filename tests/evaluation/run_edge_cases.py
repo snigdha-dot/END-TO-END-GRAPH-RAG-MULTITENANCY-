@@ -86,7 +86,14 @@ class EdgeCaseRunner:
         try:
             with tenant_scope(ctx):
                 result = await retrieval_pipeline.retrieve(
-                    ctx=ctx, query=case.query, top_k=5
+                    ctx=ctx,
+                    query=case.query,
+                    top_k=5,
+                    # Cases that carry prior turns test resolution against context
+                    # rather than clarification; without passing it the pipeline
+                    # correctly asks for clarification and the case scores as a
+                    # failure of the harness, not of the system.
+                    conversation_context=case.conversation_context or None,
                 )
             outcome.latency_ms = (time.perf_counter() - started) * 1000
         except SecurityViolationError as exc:
