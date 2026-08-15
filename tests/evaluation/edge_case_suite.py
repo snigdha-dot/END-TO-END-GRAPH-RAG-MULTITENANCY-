@@ -399,7 +399,112 @@ ISOLATION_QUERIES: List[EdgeCaseQuery] = [
 ]
 
 
-ALL_QUERIES: List[EdgeCaseQuery] = (
+# --------------------------------------------------------------- ground truth
+#
+# Chunk markers for the remaining scorable categories, kept in one table rather
+# than scattered through the query definitions above so the mapping between a
+# query and what counts as a correct retrieval stays reviewable at a glance.
+#
+# Markers are content substrings, not chunk ids: ids are positional and shift
+# whenever chunking configuration changes, which would silently invalidate the
+# ground truth during the chunking A/B.
+#
+# Behavioural categories are deliberately absent. Abstention, adversarial, and
+# clarification queries pass by *not* retrieving, so IR ground truth for them
+# would be meaningless.
+_GROUND_TRUTH: dict[str, tuple[List[str], List[str]]] = {
+    # exact entity
+    "Alkaptonuria": (["Disease: Alkaptonuria"], ["canon_concept_alkaptonuria"]),
+    "Argininosuccinic Aciduria": (["Argininosuccinic"], []),
+    "Anulom Vilom": (["Anulom Vilom"], ["canon_concept_anulom_vilom"]),
+    "Paschimottanasana": (["Paschimottanasana"], ["canon_concept_paschimottanasana"]),
+    '"Bacopa monnieri"': (["Bacopa"], []),
+    '"Withania somnifera"': (["Withania"], []),
+    "Vata-Kapha": (["Vata"], []),
+    "Brahmi": (["Brahmi"], ["canon_entity_brahmi"]),
+    # section / context
+    "What does the Preparation section say?": (["Preparation"], []),
+    "What are the clinical notes on Brahmi?": (["Brahmi"], ["canon_entity_brahmi"]),
+    "What properties does Ashwagandha have?": (["Ashwagandha"], ["canon_entity_ashwagandha"]),
+    "How should Ashwagandha be used?": (["Ashwagandha"], ["canon_entity_ashwagandha"]),
+    "What is the duration of treatment for Cough?": (["Disease: Cough"], ["canon_concept_cough"]),
+    "What dietary habits are recommended for Arthritis?": (["Disease: Arthritis"], ["canon_concept_arthritis"]),
+    "What is the prognosis for Fever?": (["Disease: Fever"], ["canon_concept_fever"]),
+    "What lifestyle recommendations apply to Constipation?": (["Disease: Constipation"], ["canon_concept_constipation"]),
+    # relationship
+    "What is associated with Cough?": (["Disease: Cough"], ["canon_concept_cough"]),
+    "Which symptoms relate to Arthritis?": (["Disease: Arthritis"], ["canon_concept_arthritis"]),
+    "What conditions have the Vata attribute?": (["Vata"], []),
+    "What affects Fever?": (["Disease: Fever"], ["canon_concept_fever"]),
+    "What is connected to Bronchitis?": (["Bronchitis"], []),
+    "Which conditions involve Poor Sleep?": (["Poor Sleep"], []),
+    "What relates to Alzheimer's Disease?": (["Disease: Alzheimer"], []),
+    "What does Ashwagandha relate to?": (["Ashwagandha"], ["canon_entity_ashwagandha"]),
+    "What is Brahmi connected to?": (["Brahmi"], ["canon_entity_brahmi"]),
+    "What relationship exists between Ghee and Brahmi?": (["Brahmi"], ["canon_entity_brahmi"]),
+    "What is Turmeric associated with?": (["Turmeric"], ["canon_entity_turmeric"]),
+    "Which dosha does Ashwagandha balance?": (["Ashwagandha"], ["canon_entity_ashwagandha"]),
+    # multi-hop
+    "What else is associated with the conditions that cause Cough?": (["Disease: Cough"], ["canon_concept_cough"]),
+    "What other conditions share attributes with Arthritis?": (["Disease: Arthritis"], ["canon_concept_arthritis"]),
+    "Which conditions affect Vata dosha and what else treats them?": (["Vata"], []),
+    "What symptoms are shared between Cough and Bronchitis?": (["Disease: Cough"], ["canon_concept_cough"]),
+    "What other diseases involve Irregular Sleep like Fever does?": (["Irregular Sleep"], []),
+    "What is Curcumin derived from and what does that treat?": (["Curcumin"], ["canon_entity_curcumin"]),
+    "What else does the herb that Ghee is combined with treat?": (["Brahmi"], ["canon_entity_brahmi"]),
+    "Which herbs share a dosha with Ashwagandha?": (["Ashwagandha"], ["canon_entity_ashwagandha"]),
+    "What is Ashwagandha derived from and what else uses it?": (["Ashwagandha"], ["canon_entity_ashwagandha"]),
+    "What conditions besides Cough involve respiratory symptoms?": (["Disease: Cough"], ["canon_concept_cough"]),
+    # comparison
+    "Compare Cough and Bronchitis": (["Disease: Cough"], ["canon_concept_cough"]),
+    "How do Arthritis and Constipation differ?": (["Disease: Arthritis"], ["canon_concept_arthritis"]),
+    "What is common between Fever and Cough?": (["Disease: Fever"], ["canon_concept_fever"]),
+    "Compare the treatment duration of Cough and Arthritis": (["Disease: Cough"], ["canon_concept_cough"]),
+    "Compare Ashwagandha and Brahmi": (["Ashwagandha"], ["canon_entity_ashwagandha"]),
+    "How do Turmeric and Ashwagandha differ in use?": (["Turmeric"], ["canon_entity_turmeric"]),
+    "Which is better for memory, Brahmi or Ashwagandha?": (["Brahmi"], ["canon_entity_brahmi"]),
+    "Compare Vata and Pitta dosha conditions": (["Vata"], []),
+    # structured data
+    "What is the symptom severity for Cough?": (["Disease: Cough"], ["canon_concept_cough"]),
+    "What is the age group affected by Arthritis?": (["Disease: Arthritis"], ["canon_concept_arthritis"]),
+    "Which season affects Cough?": (["Disease: Cough"], ["canon_concept_cough"]),
+    "What are the risk factors listed for Fever?": (["Disease: Fever"], ["canon_concept_fever"]),
+    "What formulation is given for Cough?": (["Disease: Cough"], ["canon_concept_cough"]),
+    "What is the gender distribution for Alzheimer's Disease?": (["Disease: Alzheimer"], []),
+    "What stress levels are recorded for Arrhythmia?": (["Disease: Arrhythmia"], ["canon_concept_arrhythmia"]),
+    "Which conditions list Mild to Moderate severity?": (["Mild to Moderate"], []),
+    # cross-document
+    "Which herbs appear across multiple documents?": (["Ashwagandha"], ["canon_entity_ashwagandha"]),
+    "What do the documents say about dosha balance?": (["Vata"], []),
+    "Which herbs are mentioned alongside stress and memory?": (["Ashwagandha"], ["canon_entity_ashwagandha"]),
+    "What conditions appear with both Vata and Kapha?": (["Vata"], []),
+    "Which diseases share the symptom of nausea?": (["nausea"], []),
+    "What treatments recur across different conditions?": (["Disease:"], []),
+    # ambiguous but still retrievable
+    "treatment": (["Disease:"], []),
+}
+
+_BEHAVIOURAL_RULES = frozenset(
+    {PassRule.ABSTAINS, PassRule.REJECTS, PassRule.CLARIFIES}
+)
+
+
+def _attach_ground_truth(queries: List[EdgeCaseQuery]) -> List[EdgeCaseQuery]:
+    """Apply the ground-truth table to queries scored by IR metrics."""
+    for query in queries:
+        if query.rule in _BEHAVIOURAL_RULES or query.relevant_chunk_markers:
+            continue
+        entry = _GROUND_TRUTH.get(query.query)
+        if entry is None:
+            continue
+        markers, entities = entry
+        query.relevant_chunk_markers = list(markers)
+        if entities and not query.relevant_entities:
+            query.relevant_entities = list(entities)
+    return queries
+
+
+ALL_QUERIES: List[EdgeCaseQuery] = _attach_ground_truth(
     SEMANTIC_QUERIES + EXACT_QUERIES + SECTION_QUERIES + RELATIONSHIP_QUERIES
     + MULTI_HOP_QUERIES + COMPARISON_QUERIES + GLOBAL_QUERIES + STRUCTURED_QUERIES
     + CROSS_DOC_QUERIES + AMBIGUOUS_QUERIES + NO_ANSWER_QUERIES

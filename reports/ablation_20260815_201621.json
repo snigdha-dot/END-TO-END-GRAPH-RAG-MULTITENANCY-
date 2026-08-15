@@ -1,0 +1,1133 @@
+{
+  "generated_at": "2026-08-15T20:16:21.071398+00:00",
+  "environment": {
+    "semantic_embeddings": true,
+    "embedding_model": "bge-small-en-v1.5",
+    "embedding_version": "bge-small-en-v1.5/384/v1",
+    "cross_encoder_active": true,
+    "reranker_model": "ms-marco-MiniLM-L-6-v2"
+  },
+  "query_count": 8,
+  "scored_query_count": 8,
+  "configurations": {
+    "A": {
+      "queries": 8,
+      "scored_queries": 8,
+      "errors": 0,
+      "recall_at_1": 0.9,
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "precision_at_5": 0.3,
+      "mrr": 1.0,
+      "ndcg_at_10": 1.0,
+      "p50_ms": 467.3,
+      "p95_ms": 4246.2,
+      "p99_ms": 4246.2,
+      "mean_ms": 917.6
+    },
+    "H": {
+      "queries": 8,
+      "scored_queries": 8,
+      "errors": 0,
+      "recall_at_1": 0.9,
+      "recall_at_5": 1.0,
+      "recall_at_10": 1.0,
+      "precision_at_5": 0.3,
+      "mrr": 1.0,
+      "ndcg_at_10": 1.0,
+      "p50_ms": 2459.1,
+      "p95_ms": 7309.9,
+      "p99_ms": 7309.9,
+      "mean_ms": 2939.2
+    }
+  },
+  "graph_lift": {
+    "relationship": {
+      "queries": 0,
+      "note": "no scored queries in category"
+    },
+    "multi_hop": {
+      "queries": 0,
+      "note": "no scored queries in category"
+    },
+    "comparison": {
+      "queries": 0,
+      "note": "no scored queries in category"
+    },
+    "global_community": {
+      "queries": 0,
+      "note": "no scored queries in category"
+    },
+    "overall": {
+      "queries": 8,
+      "vector_recall_at_10": 1.0,
+      "hybrid_recall_at_10": 1.0,
+      "graph_lift": 0.0
+    }
+  },
+  "slowest_queries": [
+    {
+      "rank": 1,
+      "query": "What are the symptoms of Cough?",
+      "category": "basic_semantic",
+      "tenant": "ayurveda_v2",
+      "config": "H",
+      "vector_candidates": 30,
+      "vector_ms": 407.93,
+      "lexical_ms": 11.29,
+      "graph_ms": 2363.94,
+      "fusion_ms": 0.08,
+      "rerank_ms": 4508.17,
+      "total_ms": 7309.9
+    },
+    {
+      "rank": 2,
+      "query": "How is Constipation managed?",
+      "category": "basic_semantic",
+      "tenant": "ayurveda_v2",
+      "config": "A",
+      "vector_candidates": 30,
+      "vector_ms": 4104.59,
+      "lexical_ms": 0.0,
+      "graph_ms": 0.0,
+      "fusion_ms": 0.0,
+      "rerank_ms": 0.0,
+      "total_ms": 4246.2
+    },
+    {
+      "rank": 3,
+      "query": "Tell me about Arthritis",
+      "category": "basic_semantic",
+      "tenant": "ayurveda_v2",
+      "config": "H",
+      "vector_candidates": 30,
+      "vector_ms": 269.6,
+      "lexical_ms": 0.1,
+      "graph_ms": 1384.99,
+      "fusion_ms": 0.06,
+      "rerank_ms": 1703.38,
+      "total_ms": 3379.9
+    },
+    {
+      "rank": 4,
+      "query": "What causes Fever?",
+      "category": "basic_semantic",
+      "tenant": "ayurveda_v2",
+      "config": "H",
+      "vector_candidates": 30,
+      "vector_ms": 78.02,
+      "lexical_ms": 0.11,
+      "graph_ms": 1182.83,
+      "fusion_ms": 0.06,
+      "rerank_ms": 1537.12,
+      "total_ms": 2827.7
+    },
+    {
+      "rank": 5,
+      "query": "What is Arrhythmia?",
+      "category": "basic_semantic",
+      "tenant": "ayurveda_v2",
+      "config": "H",
+      "vector_candidates": 30,
+      "vector_ms": 122.89,
+      "lexical_ms": 0.05,
+      "graph_ms": 500.67,
+      "fusion_ms": 0.05,
+      "rerank_ms": 1853.15,
+      "total_ms": 2504.9
+    },
+    {
+      "rank": 6,
+      "query": "Describe Adrenal Insufficiency",
+      "category": "basic_semantic",
+      "tenant": "ayurveda_v2",
+      "config": "H",
+      "vector_candidates": 30,
+      "vector_ms": 121.35,
+      "lexical_ms": 0.15,
+      "graph_ms": 25.36,
+      "fusion_ms": 0.09,
+      "rerank_ms": 2281.13,
+      "total_ms": 2459.1
+    },
+    {
+      "rank": 7,
+      "query": "How is Constipation managed?",
+      "category": "basic_semantic",
+      "tenant": "ayurveda_v2",
+      "config": "H",
+      "vector_candidates": 30,
+      "vector_ms": 134.27,
+      "lexical_ms": 0.09,
+      "graph_ms": 396.22,
+      "fusion_ms": 0.05,
+      "rerank_ms": 1619.41,
+      "total_ms": 2175.7
+    },
+    {
+      "rank": 8,
+      "query": "Information about Alzheimer's Disease",
+      "category": "basic_semantic",
+      "tenant": "ayurveda_v2",
+      "config": "H",
+      "vector_candidates": 30,
+      "vector_ms": 98.66,
+      "lexical_ms": 0.22,
+      "graph_ms": 430.39,
+      "fusion_ms": 0.07,
+      "rerank_ms": 1590.42,
+      "total_ms": 2139.5
+    },
+    {
+      "rank": 9,
+      "query": "What is Ashwagandha used for?",
+      "category": "basic_semantic",
+      "tenant": "herbs_docs",
+      "config": "H",
+      "vector_candidates": 6,
+      "vector_ms": 61.11,
+      "lexical_ms": 8.2,
+      "graph_ms": 78.8,
+      "fusion_ms": 0.05,
+      "rerank_ms": 533.57,
+      "total_ms": 717.0
+    },
+    {
+      "rank": 10,
+      "query": "Describe Adrenal Insufficiency",
+      "category": "basic_semantic",
+      "tenant": "ayurveda_v2",
+      "config": "A",
+      "vector_candidates": 30,
+      "vector_ms": 514.06,
+      "lexical_ms": 0.0,
+      "graph_ms": 0.0,
+      "fusion_ms": 0.0,
+      "rerank_ms": 0.0,
+      "total_ms": 659.7
+    }
+  ],
+  "per_query": {
+    "A": [
+      {
+        "query": "What are the symptoms of Cough?",
+        "category": "basic_semantic",
+        "tenant": "ayurveda_v2",
+        "route": "Vector",
+        "recall_at_1": 1.0,
+        "recall_at_5": 1.0,
+        "recall_at_10": 1.0,
+        "precision_at_5": 0.2,
+        "mrr": 1.0,
+        "ndcg_at_10": 1.0,
+        "retrieved_chunk_ids": [
+          "doc_ayurgenixai_dataset_c0",
+          "doc_ayurgenixai_dataset_c5",
+          "doc_ayurgenixai_dataset_c13",
+          "doc_ayurgenixai_dataset_c7",
+          "doc_ayurgenixai_dataset_c26",
+          "doc_ayurgenixai_dataset_c6",
+          "doc_ayurgenixai_dataset_c17",
+          "doc_ayurgenixai_dataset_c3",
+          "doc_ayurgenixai_dataset_c25",
+          "doc_ayurgenixai_dataset_c21"
+        ],
+        "expected_chunk_ids": [
+          "doc_ayurgenixai_dataset_c0"
+        ],
+        "retrieved_entities": [],
+        "expected_entities": [
+          "canon_concept_cough"
+        ],
+        "retrieved_relationships": [],
+        "expected_relationships": [],
+        "retrieval_latency_ms": 381.0,
+        "total_latency_ms": 467.3,
+        "stage_latencies": {
+          "vector_ms": 380.97
+        },
+        "error": null
+      },
+      {
+        "query": "Tell me about Arthritis",
+        "category": "basic_semantic",
+        "tenant": "ayurveda_v2",
+        "route": "Vector",
+        "recall_at_1": 1.0,
+        "recall_at_5": 1.0,
+        "recall_at_10": 1.0,
+        "precision_at_5": 0.2,
+        "mrr": 1.0,
+        "ndcg_at_10": 1.0,
+        "retrieved_chunk_ids": [
+          "doc_ayurgenixai_dataset_c4",
+          "doc_ayurgenixai_dataset_c20",
+          "doc_ayurgenixai_dataset_c7",
+          "doc_ayurgenixai_dataset_c25",
+          "doc_ayurgenixai_dataset_c18",
+          "doc_ayurgenixai_dataset_c13",
+          "doc_ayurgenixai_dataset_c23",
+          "doc_ayurgenixai_dataset_c17",
+          "doc_ayurgenixai_dataset_c2",
+          "doc_ayurgenixai_dataset_c3"
+        ],
+        "expected_chunk_ids": [
+          "doc_ayurgenixai_dataset_c4"
+        ],
+        "retrieved_entities": [],
+        "expected_entities": [
+          "canon_concept_arthritis"
+        ],
+        "retrieved_relationships": [],
+        "expected_relationships": [],
+        "retrieval_latency_ms": 112.9,
+        "total_latency_ms": 247.9,
+        "stage_latencies": {
+          "vector_ms": 112.91
+        },
+        "error": null
+      },
+      {
+        "query": "How is Constipation managed?",
+        "category": "basic_semantic",
+        "tenant": "ayurveda_v2",
+        "route": "Vector",
+        "recall_at_1": 1.0,
+        "recall_at_5": 1.0,
+        "recall_at_10": 1.0,
+        "precision_at_5": 0.2,
+        "mrr": 1.0,
+        "ndcg_at_10": 1.0,
+        "retrieved_chunk_ids": [
+          "doc_ayurgenixai_dataset_c8",
+          "doc_ayurgenixai_dataset_c24",
+          "doc_ayurgenixai_dataset_c6",
+          "doc_ayurgenixai_dataset_c14",
+          "doc_ayurgenixai_dataset_c28",
+          "doc_ayurgenixai_dataset_c17",
+          "doc_ayurgenixai_dataset_c27",
+          "doc_ayurgenixai_dataset_c22",
+          "doc_ayurgenixai_dataset_c10",
+          "doc_ayurgenixai_dataset_c1"
+        ],
+        "expected_chunk_ids": [
+          "doc_ayurgenixai_dataset_c8"
+        ],
+        "retrieved_entities": [],
+        "expected_entities": [
+          "canon_concept_constipation"
+        ],
+        "retrieved_relationships": [],
+        "expected_relationships": [],
+        "retrieval_latency_ms": 4104.6,
+        "total_latency_ms": 4246.2,
+        "stage_latencies": {
+          "vector_ms": 4104.59
+        },
+        "error": null
+      },
+      {
+        "query": "What causes Fever?",
+        "category": "basic_semantic",
+        "tenant": "ayurveda_v2",
+        "route": "Vector",
+        "recall_at_1": 1.0,
+        "recall_at_5": 1.0,
+        "recall_at_10": 1.0,
+        "precision_at_5": 0.2,
+        "mrr": 1.0,
+        "ndcg_at_10": 1.0,
+        "retrieved_chunk_ids": [
+          "doc_ayurgenixai_dataset_c13",
+          "doc_ayurgenixai_dataset_c5",
+          "doc_ayurgenixai_dataset_c2",
+          "doc_ayurgenixai_dataset_c17",
+          "doc_ayurgenixai_dataset_c0",
+          "doc_ayurgenixai_dataset_c19",
+          "doc_ayurgenixai_dataset_c4",
+          "doc_ayurgenixai_dataset_c3",
+          "doc_ayurgenixai_dataset_c24",
+          "doc_ayurgenixai_dataset_c18"
+        ],
+        "expected_chunk_ids": [
+          "doc_ayurgenixai_dataset_c13"
+        ],
+        "retrieved_entities": [],
+        "expected_entities": [
+          "canon_concept_fever"
+        ],
+        "retrieved_relationships": [],
+        "expected_relationships": [],
+        "retrieval_latency_ms": 493.3,
+        "total_latency_ms": 572.3,
+        "stage_latencies": {
+          "vector_ms": 493.34
+        },
+        "error": null
+      },
+      {
+        "query": "Information about Alzheimer's Disease",
+        "category": "basic_semantic",
+        "tenant": "ayurveda_v2",
+        "route": "Vector",
+        "recall_at_1": 1.0,
+        "recall_at_5": 1.0,
+        "recall_at_10": 1.0,
+        "precision_at_5": 0.2,
+        "mrr": 1.0,
+        "ndcg_at_10": 1.0,
+        "retrieved_chunk_ids": [
+          "doc_ayurgenixai_dataset_c23",
+          "doc_ayurgenixai_dataset_c25",
+          "doc_ayurgenixai_dataset_c1",
+          "doc_ayurgenixai_dataset_c18",
+          "doc_ayurgenixai_dataset_c3",
+          "doc_ayurgenixai_dataset_c27",
+          "doc_ayurgenixai_dataset_c4",
+          "doc_ayurgenixai_dataset_c10",
+          "doc_ayurgenixai_dataset_c12",
+          "doc_ayurgenixai_dataset_c19"
+        ],
+        "expected_chunk_ids": [
+          "doc_ayurgenixai_dataset_c23"
+        ],
+        "retrieved_entities": [],
+        "expected_entities": [
+          "canon_concept_alzheimers_disease"
+        ],
+        "retrieved_relationships": [],
+        "expected_relationships": [],
+        "retrieval_latency_ms": 453.3,
+        "total_latency_ms": 571.5,
+        "stage_latencies": {
+          "vector_ms": 453.3
+        },
+        "error": null
+      },
+      {
+        "query": "What is Arrhythmia?",
+        "category": "basic_semantic",
+        "tenant": "ayurveda_v2",
+        "route": "Vector",
+        "recall_at_1": 1.0,
+        "recall_at_5": 1.0,
+        "recall_at_10": 1.0,
+        "precision_at_5": 0.2,
+        "mrr": 1.0,
+        "ndcg_at_10": 1.0,
+        "retrieved_chunk_ids": [
+          "doc_ayurgenixai_dataset_c29",
+          "doc_ayurgenixai_dataset_c27",
+          "doc_ayurgenixai_dataset_c28",
+          "doc_ayurgenixai_dataset_c2",
+          "doc_ayurgenixai_dataset_c19",
+          "doc_ayurgenixai_dataset_c17",
+          "doc_ayurgenixai_dataset_c16",
+          "doc_ayurgenixai_dataset_c24",
+          "doc_ayurgenixai_dataset_c18",
+          "doc_ayurgenixai_dataset_c9"
+        ],
+        "expected_chunk_ids": [
+          "doc_ayurgenixai_dataset_c29"
+        ],
+        "retrieved_entities": [],
+        "expected_entities": [
+          "canon_concept_arrhythmia"
+        ],
+        "retrieved_relationships": [],
+        "expected_relationships": [],
+        "retrieval_latency_ms": 263.7,
+        "total_latency_ms": 399.3,
+        "stage_latencies": {
+          "vector_ms": 263.68
+        },
+        "error": null
+      },
+      {
+        "query": "Describe Adrenal Insufficiency",
+        "category": "basic_semantic",
+        "tenant": "ayurveda_v2",
+        "route": "Vector",
+        "recall_at_1": 1.0,
+        "recall_at_5": 1.0,
+        "recall_at_10": 1.0,
+        "precision_at_5": 0.2,
+        "mrr": 1.0,
+        "ndcg_at_10": 1.0,
+        "retrieved_chunk_ids": [
+          "doc_ayurgenixai_dataset_c19",
+          "doc_ayurgenixai_dataset_c18",
+          "doc_ayurgenixai_dataset_c16",
+          "doc_ayurgenixai_dataset_c28",
+          "doc_ayurgenixai_dataset_c14",
+          "doc_ayurgenixai_dataset_c17",
+          "doc_ayurgenixai_dataset_c22",
+          "doc_ayurgenixai_dataset_c27",
+          "doc_ayurgenixai_dataset_c15",
+          "doc_ayurgenixai_dataset_c6"
+        ],
+        "expected_chunk_ids": [
+          "doc_ayurgenixai_dataset_c19"
+        ],
+        "retrieved_entities": [],
+        "expected_entities": [
+          "canon_concept_adrenal_insufficiency"
+        ],
+        "retrieved_relationships": [],
+        "expected_relationships": [],
+        "retrieval_latency_ms": 514.1,
+        "total_latency_ms": 659.7,
+        "stage_latencies": {
+          "vector_ms": 514.06
+        },
+        "error": null
+      },
+      {
+        "query": "What is Ashwagandha used for?",
+        "category": "basic_semantic",
+        "tenant": "herbs_docs",
+        "route": "Vector",
+        "recall_at_1": 0.2,
+        "recall_at_5": 1.0,
+        "recall_at_10": 1.0,
+        "precision_at_5": 1.0,
+        "mrr": 1.0,
+        "ndcg_at_10": 1.0,
+        "retrieved_chunk_ids": [
+          "doc_ashwagandha_c0",
+          "doc_ashwagandha_c2",
+          "doc_ashwagandha_c1",
+          "doc_ashwagandha_c3",
+          "doc_brahmi_c0",
+          "doc_turmeric_c0"
+        ],
+        "expected_chunk_ids": [
+          "doc_ashwagandha_c0",
+          "doc_ashwagandha_c1",
+          "doc_ashwagandha_c2",
+          "doc_ashwagandha_c3",
+          "doc_brahmi_c0"
+        ],
+        "retrieved_entities": [],
+        "expected_entities": [
+          "canon_entity_ashwagandha"
+        ],
+        "retrieved_relationships": [],
+        "expected_relationships": [],
+        "retrieval_latency_ms": 24.1,
+        "total_latency_ms": 176.9,
+        "stage_latencies": {
+          "vector_ms": 24.11
+        },
+        "error": null
+      }
+    ],
+    "H": [
+      {
+        "query": "What are the symptoms of Cough?",
+        "category": "basic_semantic",
+        "tenant": "ayurveda_v2",
+        "route": "Full+Reranker",
+        "recall_at_1": 1.0,
+        "recall_at_5": 1.0,
+        "recall_at_10": 1.0,
+        "precision_at_5": 0.2,
+        "mrr": 1.0,
+        "ndcg_at_10": 1.0,
+        "retrieved_chunk_ids": [
+          "doc_ayurgenixai_dataset_c0",
+          "doc_ayurgenixai_dataset_c5",
+          "doc_ayurgenixai_dataset_c7",
+          "doc_ayurgenixai_dataset_c21",
+          "doc_ayurgenixai_dataset_c24",
+          "doc_ayurgenixai_dataset_c6",
+          "doc_ayurgenixai_dataset_c25",
+          "doc_ayurgenixai_dataset_c14",
+          "doc_ayurgenixai_dataset_c13",
+          "doc_ayurgenixai_dataset_c20"
+        ],
+        "expected_chunk_ids": [
+          "doc_ayurgenixai_dataset_c0"
+        ],
+        "retrieved_entities": [
+          "canon_concept_cough",
+          "canon_entity_bronchitis",
+          "canon_concept_anulom_vilom",
+          "canon_concept_acne",
+          "canon_concept_skin_allergy",
+          "canon_concept_insomnia",
+          "canon_concept_common_cold",
+          "canon_concept_migraine",
+          "canon_concept_pranayama",
+          "canon_concept_arrhythmia",
+          "canon_concept_anxiety",
+          "canon_concept_allergies",
+          "canon_concept_acute_kidney_injury",
+          "canon_concept_acidity",
+          "canon_concept_fever",
+          "canon_concept_constipation",
+          "canon_concept_asthma",
+          "canon_concept_indigestion",
+          "canon_concept_diabetes",
+          "canon_entity_pneumonia"
+        ],
+        "expected_entities": [
+          "canon_concept_cough"
+        ],
+        "retrieved_relationships": [
+          "canon_concept_cough-ASSOCIATED_WITH->canon_entity_bronchitis",
+          "canon_concept_cough-AFFECTS->canon_concept_anulom_vilom",
+          "canon_concept_cough-AFFECTS->canon_concept_pranayama",
+          "canon_concept_cough-ASSOCIATED_WITH->canon_entity_pneumonia",
+          "canon_concept_cough-AFFECTS->canon_entity_antibiotics",
+          "canon_concept_cough-AFFECTS->canon_entity_cough_syrup",
+          "canon_concept_cough-AFFECTS->canon_entity_avoid_irritants",
+          "canon_concept_cough-ASSOCIATED_WITH->canon_entity_dusty_air",
+          "canon_concept_cough-ASSOCIATED_WITH->canon_artifact_ginger_2g",
+          "canon_concept_cough-HAS_ATTRIBUTE->canon_attribute_kapha",
+          "canon_concept_cough-HAS_ATTRIBUTE->canon_attribute_vata",
+          "canon_concept_cough-PRECEDES->canon_entity_respiratory_issues",
+          "canon_concept_cough-PRECEDES->canon_entity_asthma",
+          "canon_concept_cough-AFFECTS->canon_entity_smoking",
+          "canon_concept_cough-ASSOCIATED_WITH->canon_artifact_honey_1_tsp",
+          "canon_concept_cough-ASSOCIATED_WITH->canon_entity_tulsi",
+          "canon_concept_cough-ASSOCIATED_WITH->canon_entity_ashwagandha",
+          "canon_concept_cough-ASSOCIATED_WITH->canon_entity_cough_syrup",
+          "canon_concept_arthritis-HAS_ATTRIBUTE->canon_attribute_kapha",
+          "canon_concept_arthritis-HAS_ATTRIBUTE->canon_attribute_vata"
+        ],
+        "expected_relationships": [],
+        "retrieval_latency_ms": 7291.4,
+        "total_latency_ms": 7309.9,
+        "stage_latencies": {
+          "vector_ms": 407.93,
+          "lexical_ms": 11.29,
+          "graph_ms": 2363.94,
+          "fusion_ms": 0.08,
+          "rerank_ms": 4508.17
+        },
+        "error": null
+      },
+      {
+        "query": "Tell me about Arthritis",
+        "category": "basic_semantic",
+        "tenant": "ayurveda_v2",
+        "route": "Full+Reranker",
+        "recall_at_1": 1.0,
+        "recall_at_5": 1.0,
+        "recall_at_10": 1.0,
+        "precision_at_5": 0.2,
+        "mrr": 1.0,
+        "ndcg_at_10": 1.0,
+        "retrieved_chunk_ids": [
+          "doc_ayurgenixai_dataset_c4",
+          "doc_ayurgenixai_dataset_c16",
+          "doc_ayurgenixai_dataset_c25",
+          "doc_ayurgenixai_dataset_c23",
+          "doc_ayurgenixai_dataset_c20",
+          "doc_ayurgenixai_dataset_c19",
+          "doc_ayurgenixai_dataset_c21",
+          "doc_ayurgenixai_dataset_c7",
+          "doc_ayurgenixai_dataset_c2",
+          "doc_ayurgenixai_dataset_c11"
+        ],
+        "expected_chunk_ids": [
+          "doc_ayurgenixai_dataset_c4"
+        ],
+        "retrieved_entities": [
+          "canon_concept_arthritis",
+          "canon_entity_cold_air",
+          "canon_concept_common_cold",
+          "canon_concept_cough",
+          "canon_entity_mobility_issues",
+          "canon_attribute_40_years",
+          "canon_concept_arrhythmia",
+          "canon_concept_amyotrophic_lateral_sclerosis_als",
+          "canon_concept_alzheimers_disease",
+          "canon_concept_hypertension",
+          "canon_entity_family_history_of_diabetes",
+          "canon_concept_argininosuccinic_aciduria",
+          "canon_concept_argininemia",
+          "canon_concept_amebiasis",
+          "canon_concept_alopecia",
+          "canon_concept_allergies",
+          "canon_concept_alkaptonuria",
+          "canon_concept_adrenal_insufficiency",
+          "canon_concept_addisons_disease",
+          "canon_concept_acute_kidney_injury"
+        ],
+        "expected_entities": [
+          "canon_concept_arthritis"
+        ],
+        "retrieved_relationships": [
+          "canon_concept_cough-HAS_ATTRIBUTE->canon_attribute_kapha",
+          "canon_concept_cough-HAS_ATTRIBUTE->canon_attribute_vata",
+          "canon_concept_cough-ASSOCIATED_WITH->canon_entity_cold_air",
+          "canon_concept_arthritis-ASSOCIATED_WITH->canon_entity_cold_air",
+          "canon_concept_arthritis-ASSOCIATED_WITH->canon_entity_mobility_issues",
+          "canon_concept_arthritis-HAS_ATTRIBUTE->canon_attribute_40_years",
+          "canon_concept_arthritis-PRECEDES->canon_entity_family_history_of_diabetes",
+          "canon_concept_arthritis-HAS_ATTRIBUTE->canon_attribute_poor_sleep",
+          "canon_concept_arthritis-ASSOCIATED_WITH->canon_entity_joint_deformity",
+          "canon_concept_arthritis-AFFECTS->canon_entity_weight_management",
+          "canon_concept_arthritis-AFFECTS->canon_entity_steroids",
+          "canon_concept_arthritis-AFFECTS->canon_entity_nsaids",
+          "canon_concept_arthritis-AFFECTS->canon_concept_strength",
+          "canon_concept_arthritis-AFFECTS->canon_concept_yoga_for_flexibility",
+          "canon_concept_arthritis-HAS_ATTRIBUTE->canon_attribute_kapha",
+          "canon_concept_arthritis-HAS_ATTRIBUTE->canon_attribute_vata",
+          "canon_concept_constipation-HAS_ATTRIBUTE->canon_attribute_vata",
+          "canon_concept_constipation-PRECEDES->canon_entity_family_history_of_diabetes",
+          "canon_concept_argininosuccinic_aciduria-HAS_ATTRIBUTE->canon_attribute_vata",
+          "canon_concept_argininosuccinic_aciduria-PRECEDES->canon_entity_family_history_of_diabetes"
+        ],
+        "expected_relationships": [],
+        "retrieval_latency_ms": 3358.1,
+        "total_latency_ms": 3379.9,
+        "stage_latencies": {
+          "vector_ms": 269.6,
+          "lexical_ms": 0.1,
+          "graph_ms": 1384.99,
+          "fusion_ms": 0.06,
+          "rerank_ms": 1703.38
+        },
+        "error": null
+      },
+      {
+        "query": "How is Constipation managed?",
+        "category": "basic_semantic",
+        "tenant": "ayurveda_v2",
+        "route": "Full+Reranker",
+        "recall_at_1": 1.0,
+        "recall_at_5": 1.0,
+        "recall_at_10": 1.0,
+        "precision_at_5": 0.2,
+        "mrr": 1.0,
+        "ndcg_at_10": 1.0,
+        "retrieved_chunk_ids": [
+          "doc_ayurgenixai_dataset_c8",
+          "doc_ayurgenixai_dataset_c27",
+          "doc_ayurgenixai_dataset_c28",
+          "doc_ayurgenixai_dataset_c21",
+          "doc_ayurgenixai_dataset_c24",
+          "doc_ayurgenixai_dataset_c29",
+          "doc_ayurgenixai_dataset_c17",
+          "doc_ayurgenixai_dataset_c19",
+          "doc_ayurgenixai_dataset_c26",
+          "doc_ayurgenixai_dataset_c10"
+        ],
+        "expected_chunk_ids": [
+          "doc_ayurgenixai_dataset_c8"
+        ],
+        "retrieved_entities": [
+          "canon_concept_constipation",
+          "canon_entity_office_job",
+          "canon_concept_acidity",
+          "canon_concept_insomnia",
+          "canon_concept_common_cold",
+          "canon_concept_arthritis",
+          "canon_entity_vegetarian",
+          "canon_entity_laxatives",
+          "canon_attribute_irregular_sleep",
+          "canon_concept_argininosuccinic_aciduria",
+          "canon_concept_argininemia",
+          "canon_concept_amebiasis",
+          "canon_concept_alopecia",
+          "canon_concept_alkaptonuria",
+          "canon_concept_addisons_disease",
+          "canon_concept_acute_kidney_injury",
+          "canon_concept_acne",
+          "canon_concept_fever",
+          "canon_concept_obesity",
+          "canon_concept_asthma"
+        ],
+        "expected_entities": [
+          "canon_concept_constipation"
+        ],
+        "retrieved_relationships": [
+          "canon_concept_cough-AFFECTS->canon_concept_pranayama",
+          "canon_concept_cough-HAS_ATTRIBUTE->canon_attribute_vata",
+          "canon_concept_cough-ASSOCIATED_WITH->canon_entity_low_physical_activity",
+          "canon_concept_cough-HAS_ATTRIBUTE->canon_attribute_irregular_sleep",
+          "canon_concept_arthritis-HAS_ATTRIBUTE->canon_attribute_vata",
+          "canon_concept_arthritis-ASSOCIATED_WITH->canon_entity_office_job",
+          "canon_concept_arthritis-HAS_ATTRIBUTE->canon_attribute_both_genders",
+          "canon_concept_constipation-ASSOCIATED_WITH->canon_entity_office_job",
+          "canon_concept_constipation-ASSOCIATED_WITH->canon_entity_vegetarian",
+          "canon_concept_constipation-AFFECTS->canon_entity_laxatives",
+          "canon_concept_constipation-HAS_ATTRIBUTE->canon_attribute_irregular_sleep",
+          "canon_concept_constipation-ASSOCIATED_WITH->canon_entity_high_fiber",
+          "canon_concept_constipation-ASSOCIATED_WITH->canon_entity_fecal_impaction",
+          "canon_concept_constipation-ASSOCIATED_WITH->canon_entity_hemorrhoids",
+          "canon_concept_constipation-AFFECTS->canon_entity_drink_water",
+          "canon_concept_constipation-AFFECTS->canon_entity_fiber",
+          "canon_concept_constipation-AFFECTS->canon_concept_pranayama",
+          "canon_concept_constipation-AFFECTS->canon_concept_paschimottanasana",
+          "canon_concept_constipation-HAS_ATTRIBUTE->canon_attribute_vata",
+          "canon_concept_constipation-ASSOCIATED_WITH->canon_artifact_warm_water_200ml"
+        ],
+        "expected_relationships": [],
+        "retrieval_latency_ms": 2150.0,
+        "total_latency_ms": 2175.7,
+        "stage_latencies": {
+          "vector_ms": 134.27,
+          "lexical_ms": 0.09,
+          "graph_ms": 396.22,
+          "fusion_ms": 0.05,
+          "rerank_ms": 1619.41
+        },
+        "error": null
+      },
+      {
+        "query": "What causes Fever?",
+        "category": "basic_semantic",
+        "tenant": "ayurveda_v2",
+        "route": "Full+Reranker",
+        "recall_at_1": 1.0,
+        "recall_at_5": 1.0,
+        "recall_at_10": 1.0,
+        "precision_at_5": 0.2,
+        "mrr": 1.0,
+        "ndcg_at_10": 1.0,
+        "retrieved_chunk_ids": [
+          "doc_ayurgenixai_dataset_c13",
+          "doc_ayurgenixai_dataset_c24",
+          "doc_ayurgenixai_dataset_c5",
+          "doc_ayurgenixai_dataset_c21",
+          "doc_ayurgenixai_dataset_c11",
+          "doc_ayurgenixai_dataset_c0",
+          "doc_ayurgenixai_dataset_c17",
+          "doc_ayurgenixai_dataset_c2",
+          "doc_ayurgenixai_dataset_c18",
+          "doc_ayurgenixai_dataset_c4"
+        ],
+        "expected_chunk_ids": [
+          "doc_ayurgenixai_dataset_c13"
+        ],
+        "retrieved_entities": [
+          "canon_concept_fever",
+          "canon_entity_rest",
+          "canon_concept_anxiety",
+          "canon_concept_insomnia",
+          "canon_concept_common_cold",
+          "canon_attribute_kapha",
+          "canon_concept_amebiasis",
+          "canon_concept_allergies",
+          "canon_concept_alkaptonuria",
+          "canon_concept_acute_kidney_injury",
+          "canon_concept_acromegaly",
+          "canon_concept_obesity",
+          "canon_concept_asthma",
+          "canon_concept_arthritis",
+          "canon_concept_diabetes",
+          "canon_concept_cough",
+          "canon_entity_organ_failure",
+          "canon_entity_sepsis",
+          "canon_entity_hydration",
+          "canon_entity_antibiotics"
+        ],
+        "expected_entities": [
+          "canon_concept_fever"
+        ],
+        "retrieved_relationships": [
+          "canon_concept_cough-AFFECTS->canon_concept_pranayama",
+          "canon_concept_cough-AFFECTS->canon_entity_antibiotics",
+          "canon_concept_cough-ASSOCIATED_WITH->canon_artifact_ginger_2g",
+          "canon_concept_cough-HAS_ATTRIBUTE->canon_attribute_kapha",
+          "canon_concept_cough-ASSOCIATED_WITH->canon_entity_tulsi",
+          "canon_concept_cough-ASSOCIATED_WITH->canon_entity_honey",
+          "canon_concept_cough-ASSOCIATED_WITH->canon_entity_ginger",
+          "canon_concept_cough-HAS_ATTRIBUTE->canon_attribute_all_ages",
+          "canon_concept_arthritis-HAS_ATTRIBUTE->canon_attribute_kapha",
+          "canon_concept_arthritis-ASSOCIATED_WITH->canon_entity_ginger",
+          "canon_concept_constipation-AFFECTS->canon_concept_pranayama",
+          "canon_concept_constipation-HAS_ATTRIBUTE->canon_attribute_all_ages",
+          "canon_concept_argininosuccinic_aciduria-HAS_ATTRIBUTE->canon_attribute_pitta",
+          "canon_concept_argininosuccinic_aciduria-HAS_ATTRIBUTE->canon_attribute_all_ages",
+          "canon_concept_fever-AFFECTS->canon_entity_rest",
+          "canon_concept_fever-HAS_ATTRIBUTE->canon_attribute_kapha",
+          "canon_concept_fever-ASSOCIATED_WITH->canon_entity_organ_failure",
+          "canon_concept_fever-ASSOCIATED_WITH->canon_entity_sepsis",
+          "canon_concept_fever-AFFECTS->canon_entity_hydration",
+          "canon_concept_fever-AFFECTS->canon_entity_antibiotics"
+        ],
+        "expected_relationships": [],
+        "retrieval_latency_ms": 2798.1,
+        "total_latency_ms": 2827.7,
+        "stage_latencies": {
+          "vector_ms": 78.02,
+          "lexical_ms": 0.11,
+          "graph_ms": 1182.83,
+          "fusion_ms": 0.06,
+          "rerank_ms": 1537.12
+        },
+        "error": null
+      },
+      {
+        "query": "Information about Alzheimer's Disease",
+        "category": "basic_semantic",
+        "tenant": "ayurveda_v2",
+        "route": "Full+Reranker",
+        "recall_at_1": 1.0,
+        "recall_at_5": 1.0,
+        "recall_at_10": 1.0,
+        "precision_at_5": 0.2,
+        "mrr": 1.0,
+        "ndcg_at_10": 1.0,
+        "retrieved_chunk_ids": [
+          "doc_ayurgenixai_dataset_c23",
+          "doc_ayurgenixai_dataset_c18",
+          "doc_ayurgenixai_dataset_c25",
+          "doc_ayurgenixai_dataset_c19",
+          "doc_ayurgenixai_dataset_c4",
+          "doc_ayurgenixai_dataset_c20",
+          "doc_ayurgenixai_dataset_c16",
+          "doc_ayurgenixai_dataset_c28",
+          "doc_ayurgenixai_dataset_c27",
+          "doc_ayurgenixai_dataset_c29"
+        ],
+        "expected_chunk_ids": [
+          "doc_ayurgenixai_dataset_c23"
+        ],
+        "retrieved_entities": [
+          "canon_concept_alzheimers_disease",
+          "canon_entity_ashwagandha",
+          "canon_concept_amyotrophic_lateral_sclerosis_als",
+          "canon_concept_allergies",
+          "canon_concept_alkaptonuria",
+          "canon_concept_adrenal_insufficiency",
+          "canon_concept_addisons_disease",
+          "canon_concept_acromegaly",
+          "canon_concept_anxiety",
+          "canon_concept_insomnia",
+          "canon_concept_asthma",
+          "canon_concept_arthritis",
+          "canon_concept_hypertension",
+          "canon_concept_cough",
+          "canon_entity_ginkgo_biloba",
+          "canon_entity_high_antioxidant",
+          "canon_entity_acetylcholinesterase_inhibitors",
+          "canon_attribute_pitta",
+          "canon_concept_arrhythmia",
+          "canon_concept_argininosuccinic_aciduria"
+        ],
+        "expected_entities": [
+          "canon_concept_alzheimers_disease"
+        ],
+        "retrieved_relationships": [
+          "canon_concept_cough-HAS_ATTRIBUTE->canon_attribute_vata",
+          "canon_concept_cough-ASSOCIATED_WITH->canon_entity_ashwagandha",
+          "canon_concept_arthritis-HAS_ATTRIBUTE->canon_attribute_poor_sleep",
+          "canon_concept_arthritis-HAS_ATTRIBUTE->canon_attribute_vata",
+          "canon_concept_arthritis-ASSOCIATED_WITH->canon_entity_ashwagandha",
+          "canon_concept_constipation-HAS_ATTRIBUTE->canon_attribute_vata",
+          "canon_concept_constipation-ASSOCIATED_WITH->canon_artifact_warm_water_200ml",
+          "canon_concept_argininosuccinic_aciduria-HAS_ATTRIBUTE->canon_attribute_vata",
+          "canon_concept_argininosuccinic_aciduria-HAS_ATTRIBUTE->canon_attribute_pitta",
+          "canon_concept_fever-HAS_ATTRIBUTE->canon_attribute_pitta",
+          "canon_concept_adrenal_insufficiency-HAS_ATTRIBUTE->canon_attribute_vata",
+          "canon_concept_adrenal_insufficiency-ASSOCIATED_WITH->canon_artifact_warm_water_200ml",
+          "canon_concept_adrenal_insufficiency-ASSOCIATED_WITH->canon_entity_ashwagandha",
+          "canon_concept_adrenal_insufficiency-HAS_ATTRIBUTE->canon_attribute_poor_sleep",
+          "canon_concept_alzheimers_disease-ASSOCIATED_WITH->canon_entity_ashwagandha",
+          "canon_concept_alzheimers_disease-ASSOCIATED_WITH->canon_entity_ginkgo_biloba",
+          "canon_concept_alzheimers_disease-ASSOCIATED_WITH->canon_entity_high_antioxidant",
+          "canon_concept_alzheimers_disease-ASSOCIATED_WITH->canon_entity_acetylcholinesterase_inhibitors",
+          "canon_concept_alzheimers_disease-HAS_ATTRIBUTE->canon_attribute_pitta",
+          "canon_concept_alzheimers_disease-ASSOCIATED_WITH->canon_entity_dementia"
+        ],
+        "expected_relationships": [],
+        "retrieval_latency_ms": 2119.8,
+        "total_latency_ms": 2139.5,
+        "stage_latencies": {
+          "vector_ms": 98.66,
+          "lexical_ms": 0.22,
+          "graph_ms": 430.39,
+          "fusion_ms": 0.07,
+          "rerank_ms": 1590.42
+        },
+        "error": null
+      },
+      {
+        "query": "What is Arrhythmia?",
+        "category": "basic_semantic",
+        "tenant": "ayurveda_v2",
+        "route": "Full+Reranker",
+        "recall_at_1": 1.0,
+        "recall_at_5": 1.0,
+        "recall_at_10": 1.0,
+        "precision_at_5": 0.2,
+        "mrr": 1.0,
+        "ndcg_at_10": 1.0,
+        "retrieved_chunk_ids": [
+          "doc_ayurgenixai_dataset_c29",
+          "doc_ayurgenixai_dataset_c27",
+          "doc_ayurgenixai_dataset_c28",
+          "doc_ayurgenixai_dataset_c19",
+          "doc_ayurgenixai_dataset_c24",
+          "doc_ayurgenixai_dataset_c26",
+          "doc_ayurgenixai_dataset_c17",
+          "doc_ayurgenixai_dataset_c18",
+          "doc_ayurgenixai_dataset_c8",
+          "doc_ayurgenixai_dataset_c2"
+        ],
+        "expected_chunk_ids": [
+          "doc_ayurgenixai_dataset_c29"
+        ],
+        "retrieved_entities": [
+          "canon_concept_arrhythmia",
+          "canon_entity_hawthorn",
+          "canon_entity_heartburn",
+          "canon_concept_acidity",
+          "canon_concept_hypertension",
+          "canon_entity_stroke",
+          "canon_concept_migraine",
+          "canon_entity_heart_health_monitoring",
+          "canon_entity_pacemaker",
+          "canon_entity_antiarrhythmic_drugs",
+          "canon_concept_surya_namaskar",
+          "canon_concept_acute_kidney_injury",
+          "canon_concept_fever",
+          "canon_concept_obesity",
+          "canon_concept_diabetes",
+          "canon_concept_pranayama",
+          "canon_concept_anxiety",
+          "canon_concept_allergies",
+          "canon_concept_skin_allergy",
+          "canon_concept_constipation"
+        ],
+        "expected_entities": [
+          "canon_concept_arrhythmia"
+        ],
+        "retrieved_relationships": [
+          "canon_concept_cough-AFFECTS->canon_concept_pranayama",
+          "canon_concept_cough-HAS_ATTRIBUTE->canon_attribute_vata",
+          "canon_concept_cough-AFFECTS->canon_entity_smoking",
+          "canon_concept_cough-ASSOCIATED_WITH->canon_entity_desk_job",
+          "canon_concept_arthritis-HAS_ATTRIBUTE->canon_attribute_vata",
+          "canon_concept_arthritis-HAS_ATTRIBUTE->canon_attribute_both_genders",
+          "canon_concept_constipation-AFFECTS->canon_concept_pranayama",
+          "canon_concept_constipation-HAS_ATTRIBUTE->canon_attribute_vata",
+          "canon_concept_constipation-ASSOCIATED_WITH->canon_artifact_warm_water_200ml",
+          "canon_concept_constipation-HAS_ATTRIBUTE->canon_attribute_both_genders",
+          "canon_concept_argininosuccinic_aciduria-HAS_ATTRIBUTE->canon_attribute_vata",
+          "canon_concept_argininosuccinic_aciduria-HAS_ATTRIBUTE->canon_attribute_pitta",
+          "canon_concept_argininosuccinic_aciduria-HAS_ATTRIBUTE->canon_attribute_both_genders",
+          "canon_concept_fever-AFFECTS->canon_concept_pranayama",
+          "canon_concept_fever-AFFECTS->canon_concept_surya_namaskar",
+          "canon_concept_fever-HAS_ATTRIBUTE->canon_attribute_pitta",
+          "canon_concept_fever-HAS_ATTRIBUTE->canon_attribute_both_genders",
+          "canon_concept_adrenal_insufficiency-HAS_ATTRIBUTE->canon_attribute_vata",
+          "canon_concept_adrenal_insufficiency-ASSOCIATED_WITH->canon_artifact_warm_water_200ml",
+          "canon_concept_adrenal_insufficiency-HAS_ATTRIBUTE->canon_attribute_both_genders"
+        ],
+        "expected_relationships": [],
+        "retrieval_latency_ms": 2476.8,
+        "total_latency_ms": 2504.9,
+        "stage_latencies": {
+          "vector_ms": 122.89,
+          "lexical_ms": 0.05,
+          "graph_ms": 500.67,
+          "fusion_ms": 0.05,
+          "rerank_ms": 1853.15
+        },
+        "error": null
+      },
+      {
+        "query": "Describe Adrenal Insufficiency",
+        "category": "basic_semantic",
+        "tenant": "ayurveda_v2",
+        "route": "Full+Reranker",
+        "recall_at_1": 1.0,
+        "recall_at_5": 1.0,
+        "recall_at_10": 1.0,
+        "precision_at_5": 0.2,
+        "mrr": 1.0,
+        "ndcg_at_10": 1.0,
+        "retrieved_chunk_ids": [
+          "doc_ayurgenixai_dataset_c19",
+          "doc_ayurgenixai_dataset_c18",
+          "doc_ayurgenixai_dataset_c16",
+          "doc_ayurgenixai_dataset_c28",
+          "doc_ayurgenixai_dataset_c14",
+          "doc_ayurgenixai_dataset_c17",
+          "doc_ayurgenixai_dataset_c22",
+          "doc_ayurgenixai_dataset_c27",
+          "doc_ayurgenixai_dataset_c15",
+          "doc_ayurgenixai_dataset_c6"
+        ],
+        "expected_chunk_ids": [
+          "doc_ayurgenixai_dataset_c19"
+        ],
+        "retrieved_entities": [],
+        "expected_entities": [
+          "canon_concept_adrenal_insufficiency"
+        ],
+        "retrieved_relationships": [],
+        "expected_relationships": [],
+        "retrieval_latency_ms": 2428.1,
+        "total_latency_ms": 2459.1,
+        "stage_latencies": {
+          "vector_ms": 121.35,
+          "lexical_ms": 0.15,
+          "graph_ms": 25.36,
+          "fusion_ms": 0.09,
+          "rerank_ms": 2281.13
+        },
+        "error": null
+      },
+      {
+        "query": "What is Ashwagandha used for?",
+        "category": "basic_semantic",
+        "tenant": "herbs_docs",
+        "route": "Full+Reranker",
+        "recall_at_1": 0.2,
+        "recall_at_5": 1.0,
+        "recall_at_10": 1.0,
+        "precision_at_5": 1.0,
+        "mrr": 1.0,
+        "ndcg_at_10": 1.0,
+        "retrieved_chunk_ids": [
+          "doc_ashwagandha_c0",
+          "doc_ashwagandha_c2",
+          "doc_ashwagandha_c1",
+          "doc_brahmi_c0",
+          "doc_ashwagandha_c3",
+          "doc_turmeric_c0"
+        ],
+        "expected_chunk_ids": [
+          "doc_ashwagandha_c0",
+          "doc_ashwagandha_c1",
+          "doc_ashwagandha_c2",
+          "doc_ashwagandha_c3",
+          "doc_brahmi_c0"
+        ],
+        "retrieved_entities": [
+          "canon_entity_ashwagandha",
+          "canon_entity_withania",
+          "canon_entity_stress",
+          "canon_attribute_vata"
+        ],
+        "expected_entities": [
+          "canon_entity_ashwagandha"
+        ],
+        "retrieved_relationships": [
+          "canon_entity_ashwagandha-DERIVED_FROM->canon_entity_withania",
+          "canon_entity_ashwagandha-ASSOCIATED_WITH->canon_entity_stress",
+          "canon_entity_ashwagandha-HAS_ATTRIBUTE->canon_attribute_vata"
+        ],
+        "expected_relationships": [],
+        "retrieval_latency_ms": 681.7,
+        "total_latency_ms": 717.0,
+        "stage_latencies": {
+          "vector_ms": 61.11,
+          "lexical_ms": 8.2,
+          "graph_ms": 78.8,
+          "fusion_ms": 0.05,
+          "rerank_ms": 533.57
+        },
+        "error": null
+      }
+    ]
+  }
+}
