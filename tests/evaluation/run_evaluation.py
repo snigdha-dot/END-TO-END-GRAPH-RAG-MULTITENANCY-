@@ -32,7 +32,9 @@ from app.services.graph_schema_service import graph_schema_service
 from app.services.ingestion_service import ingestion_service
 from app.services.reranker_service import reranker_service
 from app.services.retrieval_service import retrieval_service
+from tests.evaluation.corpus_loader import load_corpus
 from tests.evaluation.dataset import ALL_FIXTURES, TenantFixture
+from tests.evaluation.real_questions import REAL_EXCLUSIVE_PHRASES, REAL_QUESTION_SETS
 from tests.evaluation.isolation_suite import IsolationSuite
 from tests.evaluation.metrics import (
     QuestionResult,
@@ -67,6 +69,56 @@ async def preflight() -> Dict[str, Any]:
         "ner_backend": extraction_service.active_backend,
         "extractor_model": extraction_service.model_label,
     }
+
+
+def build_fixtures(args: argparse.Namespace) -> List[TenantFixture]:
+    """Return the fixtures to evaluate, loading a real corpus when requested."""
+    if args.corpus == "synthetic":
+        return list(ALL_FIXTURES)
+
+    fixtures: List[TenantFixture] = []
+    for base in ALL_FIXTURES:
+        tenant_id = base.tenant_id
+        kwargs: Dict[str, Any] = {}
+        if args.corpus == "wikipedia":
+            kwargs["max_articles"] = args.max_docs
+        elif args.corpus == "kaggle":
+            if not args.kaggle_dataset or not args.text_column:
+                raise SystemExit(
+                    "--corpus kaggle requires --kaggle-dataset and --text-column"
+                )
+            kwargs.update(
+                dataset=args.kaggle_dataset,
+                text_column=args.text_column,
+                title_column=args.title_column,
+                max_rows=args.max_docs,
+            )
+        elif args.corpus == "local":
+            if not args.local_dir:
+                raise SystemExit("--corpus local requires --local-dir")
+            kwargs.update(directory=Path(args.local_dir), max_files=args.max_docs)
+
+        corpus = load_corpus(
+            tenant_id, source=args.corpus, use_cache=not args.refresh_corpus, **kwargs
+        )
+        if not corpus.documents:
+            raise SystemExit(
+                f"Corpus for '{tenant_id}' is empty; refusing to evaluate against nothing."
+            )
+        print(f"  {tenant_id}: {corpus.summary()}")
+
+        fixtures.append(
+            TenantFixture(
+                tenant_id=tenant_id,
+                documents=corpus.documents,
+                questions=REAL_QUESTION_SETS.get(tenant_id, base.questions),
+                exclusive_entities=base.exclusive_entities,
+                exclusive_phrases=REAL_EXCLUSIVE_PHRASES.get(
+                    tenant_id, base.exclusive_phrases
+                ),
+            )
+        )
+    return fixtures
 
 
 async def provision_and_ingest(fixture: TenantFixture) -> Dict[str, Any]:
@@ -165,6 +217,19 @@ async def main() -> int:
     parser.add_argument("--no-ablation", action="store_true", help="Skip vector-only comparison")
     parser.add_argument("--no-isolation", action="store_true", help="Skip the isolation battery")
     parser.add_argument("--out", default="reports", help="Output directory")
+    parser.add_argument(
+        "--corpus",
+        choices=["synthetic", "wikipedia", "kaggle", "local"],
+        default="synthetic",
+        help="Corpus source. 'synthetic' uses the hand-written fixtures; the others "
+             "load real documents and score against the real-corpus question set.",
+    )
+    parser.add_argument("--kaggle-dataset", help="owner/dataset-name (with --corpus kaggle)")
+    parser.add_argument("--text-column", help="CSV column holding document text")
+    parser.add_argument("--title-column", help="CSV column holding document titles")
+    parser.add_argument("--local-dir", help="Directory of .txt/.md files (with --corpus local)")
+    parser.add_argument("--max-docs", type=int, default=200, help="Cap documents per tenant")
+    parser.add_argument("--refresh-corpus", action="store_true", help="Bypass the corpus cache")
     args = parser.parse_args()
 
     print("=" * 78)
@@ -194,16 +259,22 @@ async def main() -> int:
         print("         Install with: pip install -r requirements-ml.txt")
         print()
 
+    if args.corpus != "synthetic":
+        print(f"Loading '{args.corpus}' corpus...")
+    fixtures = build_fixtures(args)
+    if args.corpus != "synthetic":
+        print()
+
     report: Dict[str, Any] = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "environment": env,
+        "environment": {**env, "corpus_source": args.corpus},
         "tenants": {},
         "ingestion": {},
     }
 
     # ---------------------------------------------------------------- ingest
     if not args.skip_ingest:
-        for fixture in ALL_FIXTURES:
+        for fixture in fixtures:
             print(f"Ingesting corpus for '{fixture.tenant_id}'...")
             report["ingestion"][fixture.tenant_id] = await provision_and_ingest(fixture)
             stats = report["ingestion"][fixture.tenant_id]
@@ -216,7 +287,7 @@ async def main() -> int:
 
     # ---------------------------------------------------------------- quality
     all_results: List[QuestionResult] = []
-    for fixture in ALL_FIXTURES:
+    for fixture in fixtures:
         print(f"Evaluating '{fixture.tenant_id}' ({len(fixture.questions)} questions)...")
         results = await run_question_set(fixture, ablation=not args.no_ablation)
         all_results.extend(results)
@@ -257,7 +328,7 @@ async def main() -> int:
     # ---------------------------------------------------------------- isolation
     if not args.no_isolation:
         print("Running multi-tenancy isolation battery...")
-        suite = IsolationSuite(ALL_FIXTURES)
+        suite = IsolationSuite(fixtures)
         await suite.run_all(include_live=True)
         report["isolation"] = suite.summary()
         verdict = report["isolation"]["isolation_verdict"]
