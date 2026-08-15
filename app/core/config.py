@@ -108,6 +108,11 @@ class Settings(BaseSettings):
     # the top-k and is discarded.
     GRAPH_CHUNK_SEED_LIMIT: int = 25
     GRAPH_CHUNK_LIMIT: int = 30
+    # Edge types that fan out through shared categorical values. Excluded beyond
+    # depth 1: an Attribute such as "Mild to Moderate" is linked from hundreds of
+    # records, so transiting through one at depth 2 visits most of the graph to
+    # reach neighbours that share only a form-field value.
+    HUB_EDGE_TYPES: set[str] = {"HAS_ATTRIBUTE", "ASSOCIATED_WITH"}
     DEFAULT_TOP_K: int = 5
     SIMILARITY_THRESHOLD: float = 0.70
     ENTITY_LINK_SIMILARITY: float = 0.85

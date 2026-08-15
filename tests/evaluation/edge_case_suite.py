@@ -90,7 +90,10 @@ class EdgeCaseQuery:
         return bool(self.relevant_chunk_markers or self.relevant_entities)
 
 
-AYUR = "ayurveda_v2"
+# The 400-row ingest. A smaller corpus makes top-k retrieval return a large
+# fraction of everything, so recall saturates and the metrics stop discriminating
+# between configurations.
+AYUR = "ayurveda_full"
 DOCS = "herbs_docs"
 
 

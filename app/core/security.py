@@ -105,6 +105,19 @@ class CypherParameterizer:
         safe_limit = min(max(1, int(limit or settings.MAX_TRAVERSAL_NODES)), settings.MAX_TRAVERSAL_NODES)
 
         requested = rel_types if rel_types is not None else schema.traversal_edges()
+
+        # Beyond one hop, drop the edge types that fan out through shared
+        # categorical values. In a structured corpus a single Attribute like
+        # "Mild to Moderate" is linked from hundreds of records, so a depth-2 walk
+        # through it visits most of the graph: measured at 92 seconds on a
+        # 400-record tenant, for neighbours that share only a form-field value and
+        # are not meaningfully related.
+        #
+        # Depth 1 keeps them, because "what attributes does X have?" is a real
+        # question; it is only transiting *through* them that explodes.
+        if safe_depth > 1:
+            requested = [e for e in requested if e not in settings.HUB_EDGE_TYPES]
+
         rel_fragment = cls.safe_edge_fragment(requested, schema)
 
         # Naming the start label is a correctness-of-performance requirement, not a
