@@ -150,7 +150,12 @@ _NON_ENTITY_WORDS = {
 _SUBJECT_PREDICATE = re.compile(
     r"^\s+(?:is|was|are|were|has|have|had|became|remains|features|stars|"
     r"received|premiered|grossed|introduced|outperforms|builds|uses|supersedes|"
-    r"consists|refers|marks|won|earned)\b",
+    r"consists|refers|marks|won|earned|"
+    # Domain-neutral predicates, so a sentence-initial subject survives in any
+    # corpus rather than only in film and research prose.
+    r"treats|cures|relieves|prevents|causes|affects|influences|improves|reduces|"
+    r"contains|includes|belongs|derives|originates|provides|supports|helps|"
+    r"requires|produces|generates|enables|allows|works|acts|occurs|appears)\b",
     re.IGNORECASE,
 )
 

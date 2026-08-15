@@ -39,24 +39,37 @@ class _StubDB:
         if "normalized_name IN $names" in cypher:
             names = set(params.get("names", []))
             return [e for e in self.ENTITIES if e["normalized_name"] in names]
-        if "MATCH path" in cypher:
+        if "start.entity_id IN $start_nodes" in cypher:
+            # ArcadeDB has no path functions, so traversal projects endpoint pairs
+            # and a second query recovers the typed edges between them.
             return [
                 {
-                    "nodes": [
-                        {"entity_id": "canon_film_inception", "name": "Inception", "@type": "Film"},
-                        {"entity_id": "canon_person_christopher_nolan",
-                         "name": "Christopher Nolan", "@type": "Person"},
-                        {"entity_id": "canon_film_interstellar", "name": "Interstellar",
-                         "@type": "Film"},
-                    ],
-                    "edges": [
-                        {"source": "canon_person_christopher_nolan",
-                         "target": "canon_film_inception", "@type": "DIRECTED"},
-                        {"source": "canon_person_christopher_nolan",
-                         "target": "canon_film_interstellar", "@type": "DIRECTED"},
-                    ],
-                    "hops": 2,
-                }
+                    "source_id": "canon_film_inception", "source_name": "Inception",
+                    "source_label": "Film",
+                    "target_id": "canon_person_christopher_nolan",
+                    "target_name": "Christopher Nolan", "target_label": "Person",
+                },
+                {
+                    "source_id": "canon_film_inception", "source_name": "Inception",
+                    "source_label": "Film",
+                    "target_id": "canon_film_interstellar",
+                    "target_name": "Interstellar", "target_label": "Film",
+                },
+            ]
+        if "type(r) AS rel_type" in cypher:
+            return [
+                {
+                    "source_id": "canon_person_christopher_nolan",
+                    "rel_type": "DIRECTED",
+                    "target_id": "canon_film_inception",
+                    "confidence": 0.92,
+                },
+                {
+                    "source_id": "canon_person_christopher_nolan",
+                    "rel_type": "DIRECTED",
+                    "target_id": "canon_film_interstellar",
+                    "confidence": 0.92,
+                },
             ]
         if "MENTIONED_IN" in cypher:
             return [

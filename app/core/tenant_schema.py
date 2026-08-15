@@ -113,11 +113,75 @@ AI_TRENDS_SCHEMA = TenantGraphSchema(
     ],
 )
 
-# Generic fallback for tenants provisioned without a curated domain schema.
-DEFAULT_SCHEMA_LABELS = {"Entity", "Concept", "Person", "Organization", "Document", "Chunk"}
-DEFAULT_SCHEMA_EDGES = {
-    "RELATED_TO", "DEPENDS_ON", "MANAGES", "OWNS", "CITES", "HAS_PART", "MENTIONED_IN",
+# --------------------------------------------------------------- generic schema
+#
+# A domain-neutral vocabulary that works for any dataset in any format, so a new
+# tenant can be ingested without authoring a schema first.
+#
+# The labels are deliberately few and broad. Every additional label is a decision
+# an extractor has to get right, and a wrong label produces a wrong canonical id
+# (ids are label-scoped), so a small set of confidently-assigned labels beats a
+# large set of guesses.
+#
+# The edge types cover the relation families that recur across domains:
+#   AFFECTS         the treats/causes/influences family - the most common
+#                   real-world relation and the one most queries follow
+#   HAS_ATTRIBUTE   entity to a categorical value; how structured columns land
+#   PART_OF         containment and membership
+#   DERIVED_FROM    origin, source, derivation
+#   ASSOCIATED_WITH co-occurrence where the verb is unknown
+#   RELATED_TO      the untyped fallback, so a real relation is never discarded
+#
+# Trade-off worth stating: traversal is less precise than a domain schema. A query
+# about treatments follows AFFECTS edges that also carry causes and side-effects,
+# so recall rises and ranking suffers. Expect positive but modest graph lift.
+# Promote frequent RELATED_TO/AFFECTS patterns into typed edges once the questions
+# users actually ask are known.
+GENERIC_VERTEX_LABELS = {
+    "Entity",        # anything named that does not fit a narrower label
+    "Person",        # people
+    "Organization",  # companies, institutions, groups
+    "Concept",       # abstract: techniques, conditions, categories, topics
+    "Artifact",      # concrete named things: products, works, documents
+    "Attribute",     # categorical values worth linking (severity, season, type)
+    "Chunk",         # text units - required, the vector-search target
 }
+
+GENERIC_EDGE_TYPES = {
+    "AFFECTS",          # treats, causes, influences, impacts
+    "HAS_ATTRIBUTE",    # entity -> categorical value
+    "PART_OF",          # containment, membership
+    "DERIVED_FROM",     # origin, source
+    "ASSOCIATED_WITH",  # co-occurrence, verb unknown
+    "RELATED_TO",       # untyped fallback
+    "CITES",            # references
+    "PRECEDES",         # temporal or causal ordering
+    "MENTIONED_IN",     # entity -> chunk; required, the graph<->text bridge
+}
+
+# Kept as aliases so existing callers continue to work.
+DEFAULT_SCHEMA_LABELS = GENERIC_VERTEX_LABELS
+DEFAULT_SCHEMA_EDGES = GENERIC_EDGE_TYPES
+
+
+def build_generic_schema(tenant_id: str, display_name: str | None = None) -> TenantGraphSchema:
+    """A domain-neutral schema usable by any tenant, for any data format."""
+    return TenantGraphSchema(
+        tenant_id=tenant_id,
+        display_name=display_name or f"{tenant_id} Knowledge Base",
+        domain="generic",
+        vertex_labels=set(GENERIC_VERTEX_LABELS),
+        edge_types=set(GENERIC_EDGE_TYPES),
+        # Labels handed to GLiNER at inference time. Attribute and Chunk are
+        # excluded: they come from structure, not from named-entity recognition.
+        ner_labels=["Person", "Organization", "Concept", "Artifact"],
+        # Ordered most-informative first, so traversal follows meaningful edges
+        # before falling back to untyped association.
+        default_traversal_edges=[
+            "AFFECTS", "HAS_ATTRIBUTE", "PART_OF", "DERIVED_FROM",
+            "ASSOCIATED_WITH", "CITES", "PRECEDES", "RELATED_TO",
+        ],
+    )
 
 
 class TenantSchemaRegistry:
@@ -135,19 +199,15 @@ class TenantSchemaRegistry:
         return tenant_id in self._schemas
 
     def get(self, tenant_id: str) -> TenantGraphSchema:
-        """Return the tenant's schema, or a permissive generic schema if uncurated."""
+        """Return the tenant's schema, falling back to the generic one.
+
+        An unregistered tenant is not an error: the generic schema lets any dataset
+        be ingested without authoring a domain vocabulary first.
+        """
         existing = self._schemas.get(tenant_id)
         if existing is not None:
             return existing
-        return TenantGraphSchema(
-            tenant_id=tenant_id,
-            display_name=f"{tenant_id} Knowledge Base",
-            domain="generic",
-            vertex_labels=set(DEFAULT_SCHEMA_LABELS),
-            edge_types=set(DEFAULT_SCHEMA_EDGES),
-            ner_labels=["Person", "Organization", "Concept", "Document"],
-            default_traversal_edges=["RELATED_TO", "DEPENDS_ON", "CITES", "HAS_PART"],
-        )
+        return build_generic_schema(tenant_id)
 
     def all_tenants(self) -> List[str]:
         return sorted(self._schemas)

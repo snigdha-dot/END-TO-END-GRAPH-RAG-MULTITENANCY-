@@ -114,13 +114,80 @@ AI_RULES: List[RelationRule] = [
                  subject_labels=("Person",), object_labels=("Organization",), confidence=0.85),
 ]
 
+# ---------------------------------------------------------------- generic
+# Domain-neutral verb families, ordered so specific readings are tried before the
+# untyped fallback. Endpoint labels are left unconstrained: the generic schema's
+# labels are broad by design, and requiring specific pairs here would discard real
+# relations rather than typing them.
 GENERIC_RULES: List[RelationRule] = [
-    RelationRule("DEPENDS_ON", r"depends on|requires|relies on|needs", confidence=0.84),
-    RelationRule("MANAGES", r"manages|maintains|oversees", confidence=0.84),
-    RelationRule("OWNS", r"owns|possesses", confidence=0.84),
-    RelationRule("CITES", r"cites|references", confidence=0.82),
-    RelationRule("HAS_PART", r"contains|includes|comprises", confidence=0.82),
-    RelationRule("RELATED_TO", r"related to|associated with|linked to", confidence=0.75),
+    # AFFECTS: the treats/causes/influences family. The most common real-world
+    # relation and the one most queries follow.
+    RelationRule(
+        "AFFECTS",
+        r"treats|treated|cures|cured|alleviates|relieves|reduces|prevents|"
+        r"causes|caused|triggers|induces|leads to|results in|"
+        r"affects|influences|impacts|improves|worsens|aggravates|inhibits",
+        confidence=0.86,
+    ),
+    RelationRule(
+        "AFFECTS",
+        r"treated|caused|triggered|induced|affected|influenced",
+        passive=True,
+        confidence=0.86,
+    ),
+    # PART_OF: containment and membership.
+    RelationRule(
+        "PART_OF",
+        r"part of|belongs to|member of|included in|contained in|within|"
+        r"subset of|category of|classified as",
+        confidence=0.84,
+    ),
+    RelationRule(
+        "PART_OF",
+        r"contains|includes|comprises|consists of|encompasses|covers",
+        confidence=0.82,
+    ),
+    # DERIVED_FROM: origin and derivation.
+    RelationRule(
+        "DERIVED_FROM",
+        r"derived from|extracted from|obtained from|sourced from|made from|"
+        r"originates from|based on|built on|adapted from",
+        confidence=0.85,
+    ),
+    RelationRule(
+        "DERIVED_FROM",
+        r"derived|extracted|obtained|produced|prepared",
+        passive=True,
+        confidence=0.84,
+    ),
+    # HAS_ATTRIBUTE: entity to a categorical property.
+    RelationRule(
+        "HAS_ATTRIBUTE",
+        r"has|have|exhibits|shows|displays|characterized by|marked by|"
+        r"is a type of|is a kind of|classified under",
+        confidence=0.80,
+    ),
+    # PRECEDES: temporal or causal ordering.
+    RelationRule(
+        "PRECEDES",
+        r"precedes|followed by|before|leads to|then|subsequently|"
+        r"succeeded by|replaced by",
+        confidence=0.80,
+    ),
+    RelationRule("CITES", r"cites|references|refers to|mentions", confidence=0.82),
+    # ASSOCIATED_WITH / RELATED_TO: last resort, so a real relation with an
+    # unrecognized verb is recorded rather than silently discarded.
+    RelationRule(
+        "ASSOCIATED_WITH",
+        r"associated with|linked to|correlated with|connected to|"
+        r"co-?occurs with|accompanied by|found with",
+        confidence=0.78,
+    ),
+    RelationRule(
+        "RELATED_TO",
+        r"related to|relates to|pertains to|concerns|involves|regarding",
+        confidence=0.75,
+    ),
 ]
 
 RULES_BY_DOMAIN: Dict[str, List[RelationRule]] = {
