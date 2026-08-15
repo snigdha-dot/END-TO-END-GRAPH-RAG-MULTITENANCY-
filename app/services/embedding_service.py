@@ -74,12 +74,42 @@ class EmbeddingService:
         return settings.EMBEDDING_MODEL_LABEL if self.is_semantic else "lexical-fallback"
 
     @property
+    def embedding_version(self) -> str:
+        """Identity stamped onto every vector this service writes.
+
+        Vectors from different models occupy different spaces, so comparing them
+        produces plausible-looking similarity scores that are meaningless. The
+        version travels with the data so a mismatch is detectable rather than
+        silently degrading retrieval quality.
+        """
+        if self.is_semantic:
+            return settings.EMBEDDING_VERSION
+        return f"lexical-hash/{settings.EMBEDDING_DIMENSIONS}/v1"
+
+    def is_compatible(self, stored_version: Optional[str]) -> bool:
+        """Whether a stored vector was written by the current model."""
+        if not settings.STRICT_EMBEDDING_VERSION:
+            return True
+        if not stored_version:
+            # Vectors predating version stamping. Treated as incompatible under
+            # strict mode: an unlabelled vector cannot be shown to match.
+            return False
+        return stored_version == self.embedding_version
+
+    @property
     def dimensions(self) -> int:
         if self._model is not None:
-            try:
-                return int(self._model.get_sentence_embedding_dimension())
-            except Exception:  # noqa: BLE001
-                pass
+            # The accessor was renamed across sentence-transformers versions; try
+            # the current name first so newer installs do not emit a deprecation
+            # warning on every call.
+            for accessor in ("get_embedding_dimension", "get_sentence_embedding_dimension"):
+                getter = getattr(self._model, accessor, None)
+                if getter is None:
+                    continue
+                try:
+                    return int(getter())
+                except Exception:  # noqa: BLE001
+                    continue
         return settings.EMBEDDING_DIMENSIONS
 
     # ------------------------------------------------------------------ fallback
@@ -163,7 +193,10 @@ class EmbeddingService:
         return {
             "semantic": self.is_semantic,
             "model": self.model_label,
+            "model_id": settings.EMBEDDING_MODEL,
+            "embedding_version": self.embedding_version,
             "dimensions": self.dimensions,
+            "strict_version_check": settings.STRICT_EMBEDDING_VERSION,
             "fallback_reason": self._load_failed_reason,
         }
 

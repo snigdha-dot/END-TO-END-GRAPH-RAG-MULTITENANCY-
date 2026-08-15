@@ -1,6 +1,5 @@
 # Edge Case Evaluation Report
 
-**Generated:** 2026-08-15T19:18:09.676993+00:00
 
 ## Result: 98/100 queries passed
 

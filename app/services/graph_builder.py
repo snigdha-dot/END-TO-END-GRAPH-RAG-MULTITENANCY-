@@ -33,6 +33,7 @@ from app.core.tenant_schema import TenantGraphSchema, is_safe_identifier
 from app.models.canonical import CanonicalChunk
 from app.models.graph import Edge, Vertex
 from app.services.arcadedb_client import arcadedb_client
+from app.services.embedding_service import embedding_service
 
 logger = logging.getLogger(__name__)
 
@@ -193,7 +194,8 @@ class GraphBuilder:
                         "c.section_path = $section_path, c.embedding = $embedding, "
                         "c.prev_chunk_id = $prev_chunk_id, c.next_chunk_id = $next_chunk_id, "
                         "c.source_uri = $source_uri, c.source_format = $source_format, "
-                        "c.citation = $citation"
+                        "c.citation = $citation, c.embedding_version = $embedding_version, "
+                        "c.embedding_dim = $embedding_dim"
                     ),
                     "params": {
                         "chunk_id": chunk.chunk_id,
@@ -208,6 +210,10 @@ class GraphBuilder:
                         "source_uri": chunk.provenance.source_uri,
                         "source_format": chunk.provenance.source_format,
                         "citation": chunk.provenance.describe(),
+                        # Stamped so a later read can tell whether this vector was
+                        # written by the current model.
+                        "embedding_version": embedding_service.embedding_version,
+                        "embedding_dim": len(vector),
                     },
                 }
             )

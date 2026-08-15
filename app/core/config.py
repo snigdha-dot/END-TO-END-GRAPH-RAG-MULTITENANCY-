@@ -108,11 +108,21 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = "BAAI/bge-small-en-v1.5"
     EMBEDDING_MODEL_LABEL: str = "bge-small-en-v1.5"
     EMBEDDING_DIMENSIONS: int = 384
+    # Stamped onto every chunk alongside its vector. Vectors from different models
+    # are not comparable, so mixing them silently corrupts similarity scores in a
+    # way that looks like poor retrieval rather than a bug. Bump this when the
+    # model changes; the retriever then refuses stale vectors instead of scoring
+    # them.
+    EMBEDDING_VERSION: str = "bge-small-en-v1.5/384/v1"
     CROSS_ENCODER_MODEL: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     CROSS_ENCODER_LABEL: str = "ms-marco-MiniLM-L-6-v2"
     RERANKER_ENABLED: bool = True
+    RERANK_CANDIDATE_MULTIPLIER: int = 4
     # Degrade to lexical scoring instead of crashing when model weights are absent.
     ALLOW_MODEL_FALLBACK: bool = True
+    # Refuse to score vectors written by a different embedding model. Set false
+    # only for a deliberate mixed-version read during migration.
+    STRICT_EMBEDDING_VERSION: bool = True
 
     NER_BACKEND: Literal["gliner", "spacy", "regex"] = "regex"
     GLINER_MODEL: str = "urchade/gliner_small-v2.1"

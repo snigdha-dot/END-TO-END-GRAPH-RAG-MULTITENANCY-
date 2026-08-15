@@ -248,8 +248,9 @@ class RetrievalPipeline:
         """Dense retrieval over chunk embeddings, excluding community reports."""
         try:
             rows = await arcadedb_client.execute_sql(
-                "SELECT chunk_id, text, parent_doc_id, section_path, embedding, citation "
-                "FROM Chunk WHERE chunk_kind != 'community_report' LIMIT :limit",
+                "SELECT chunk_id, text, parent_doc_id, section_path, embedding, citation, "
+                "embedding_version FROM Chunk WHERE chunk_kind != 'community_report' "
+                "LIMIT :limit",
                 {"limit": settings.MAX_TRAVERSAL_NODES * 5},
                 tenant_id=tenant_id,
             )
@@ -260,11 +261,18 @@ class RetrievalPipeline:
             return []
 
         scored: List[Tuple[float, RetrievedChunk]] = []
+        incompatible = 0
         for row in rows:
             if not isinstance(row, dict):
                 continue
             embedding = row.get("embedding")
             if not isinstance(embedding, list) or not embedding:
+                continue
+            # Vectors from a different model occupy a different space; scoring them
+            # yields plausible numbers that mean nothing. Skipping is visible as
+            # low recall; scoring them would be invisible corruption.
+            if not embedding_service.is_compatible(row.get("embedding_version")):
+                incompatible += 1
                 continue
             score = embedding_service.cosine_similarity(
                 query_vector, [float(x) for x in embedding]
@@ -283,6 +291,13 @@ class RetrievalPipeline:
                         retrieval_path="vector",
                     ),
                 )
+            )
+
+        if incompatible:
+            logger.warning(
+                "Skipped %d chunk(s) in '%s' written by a different embedding model "
+                "(current: %s). Re-ingest the tenant to make them searchable.",
+                incompatible, tenant_id, embedding_service.embedding_version,
             )
 
         scored.sort(key=lambda pair: pair[0], reverse=True)
