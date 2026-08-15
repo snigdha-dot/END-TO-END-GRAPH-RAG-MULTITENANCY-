@@ -357,15 +357,81 @@ class ArcadeDBClient:
                 break
 
         if executed == 0:
-            for stmt in statements:
-                await self.execute_cypher(
-                    stmt["command"],
-                    stmt.get("params", {}),
-                    tenant_id=tenant_id,
-                    language=language,
-                    timeout_ms=settings.ARCADEDB_WRITE_TIMEOUT_MS,
-                )
-                executed += 1
+            executed = await self._execute_concurrent(statements, tenant_id, language)
+
+        return executed
+
+    async def _execute_concurrent(
+        self, statements: Sequence[Dict[str, Any]], tenant_id: str, language: str
+    ) -> int:
+        """Run write statements concurrently against a bounded connection pool.
+
+        With no server-side batch endpoint, writes go one statement per request.
+        Issued serially that is ~120ms of round-trip latency each and dominated
+        ingestion: 2,108 statements for two documents took 13 minutes, almost all
+        of it waiting on the network rather than on the database.
+
+        The work is I/O-bound, so a bounded semaphore overlaps the waiting. The
+        bound matters: unbounded concurrency would exhaust the pool and starve
+        concurrent retrieval traffic.
+        """
+        semaphore = asyncio.Semaphore(settings.ARCADEDB_WRITE_CONCURRENCY)
+        failures: List[Exception] = []
+
+        async def run_one(stmt: Dict[str, Any]) -> bool:
+            async with semaphore:
+                try:
+                    await self.execute_cypher(
+                        stmt["command"],
+                        stmt.get("params", {}),
+                        tenant_id=tenant_id,
+                        language=language,
+                        timeout_ms=settings.ARCADEDB_WRITE_TIMEOUT_MS,
+                    )
+                    return True
+                except DatabaseConnectionError as exc:
+                    # A single-node server under write pressure returns 503. That is
+                    # back-pressure, not a dead database, so back off and retry once
+                    # before treating it as fatal.
+                    await asyncio.sleep(0.5)
+                    try:
+                        await self.execute_cypher(
+                            stmt["command"],
+                            stmt.get("params", {}),
+                            tenant_id=tenant_id,
+                            language=language,
+                            timeout_ms=settings.ARCADEDB_WRITE_TIMEOUT_MS,
+                        )
+                        return True
+                    except (DatabaseQueryError, DatabaseConnectionError) as retry_exc:
+                        failures.append(retry_exc)
+                        return False
+                except DatabaseQueryError as exc:
+                    failures.append(exc)
+                    return False
+
+        # Chunked so a huge document does not create one task per statement at once.
+        executed = 0
+        window = max(1, settings.ARCADEDB_WRITE_CONCURRENCY * 20)
+        for start in range(0, len(statements), window):
+            batch = statements[start : start + window]
+            results = await asyncio.gather(*(run_one(s) for s in batch))
+            executed += sum(1 for ok in results if ok)
+
+            # Sustained connection failures (already retried once each) mean the
+            # database is genuinely gone; continuing would produce a silently
+            # partial graph, which is worse than failing loudly.
+            connection_failures = [
+                f for f in failures if isinstance(f, DatabaseConnectionError)
+            ]
+            if len(connection_failures) > max(5, len(statements) // 20):
+                raise connection_failures[0]
+
+        if failures:
+            logger.warning(
+                "%d of %d write statements failed for tenant '%s'; first error: %s",
+                len(failures), len(statements), tenant_id, failures[0].detail,
+            )
 
         return executed
 

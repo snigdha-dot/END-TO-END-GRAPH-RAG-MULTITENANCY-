@@ -413,12 +413,33 @@ class ExtractionService:
 
         raw_entities = self._extract_entities(text, schema)
 
+        # Keep the strongest mentions per chunk. Real prose produces a long tail of
+        # low-confidence capitalized fragments; each one costs an entity write and a
+        # MENTIONED_IN write while adding no retrievable signal. Relations are
+        # extracted from the full mention list first, so nothing that participates
+        # in an edge is lost to this cap.
+        relations = self._extract_relations(text, raw_entities, schema)
+        related_names = {
+            normalize_entity_name(r["source"]) for r in relations
+        } | {normalize_entity_name(r["target"]) for r in relations}
+
+        ranked = sorted(
+            raw_entities,
+            key=lambda e: (
+                normalize_entity_name(e["name"]) in related_names,
+                e.get("confidence", 0.0),
+            ),
+            reverse=True,
+        )
+        keep = {normalize_entity_name(e["name"]) for e in ranked[: settings.MAX_ENTITIES_PER_CHUNK]}
+        keep |= related_names
+
         vertices: List[Vertex] = []
         by_key: Dict[Tuple[str, str], Vertex] = {}
         for ent in raw_entities:
             normalized = normalize_entity_name(ent["name"])
             key = (normalized, ent["label"])
-            if not normalized or key in by_key:
+            if not normalized or key in by_key or normalized not in keep:
                 continue
             vertex = Vertex(
                 id=entity_id_for(ent["name"], ent["label"]),
@@ -443,7 +464,7 @@ class ExtractionService:
 
         edges: List[Edge] = []
         seen_edges: set[Tuple[str, str, str]] = set()
-        for rel in self._extract_relations(text, raw_entities, schema):
+        for rel in relations:
             if rel["confidence"] < settings.EDGE_CONFIDENCE_THRESHOLD:
                 continue
             src_norm = normalize_entity_name(rel["source"])

@@ -32,6 +32,16 @@ class Settings(BaseSettings):
     # Ingestion writes tolerate more than the read path: the Cypher engine has a
     # multi-second first-call warmup, and writes are not on the user-facing path.
     ARCADEDB_WRITE_TIMEOUT_MS: int = 30000
+    # Ingestion writes are I/O-bound one-statement-per-request round trips. Bounded
+    # concurrency overlaps the waiting without exhausting the pool or starving
+    # concurrent retrieval traffic.
+    # Measured: 16 concurrent writers overwhelmed a single-node ArcadeDB and it
+    # returned 503. 6 keeps it responsive while still overlapping most of the
+    # round-trip latency.
+    ARCADEDB_WRITE_CONCURRENCY: int = 6
+    # Entities per chunk. Real prose yields long tails of low-confidence mentions
+    # that add writes without adding retrievable signal.
+    MAX_ENTITIES_PER_CHUNK: int = 25
     ARCADEDB_MAX_CONNECTIONS: int = 50
     ARCADEDB_MAX_KEEPALIVE: int = 20
     # Ingestion writes are batched into a single scripted request of this size.
