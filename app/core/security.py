@@ -87,6 +87,7 @@ class CypherParameterizer:
         max_depth: int = 2,
         schema: Optional[TenantGraphSchema] = None,
         limit: Optional[int] = None,
+        seed_label: Optional[str] = None,
     ) -> Tuple[str, Dict[str, Any]]:
         """Construct a bounded, parameterized multi-hop traversal query.
 
@@ -106,12 +107,23 @@ class CypherParameterizer:
         requested = rel_types if rel_types is not None else schema.traversal_edges()
         rel_fragment = cls.safe_edge_fragment(requested, schema)
 
+        # Naming the start label is a correctness-of-performance requirement, not a
+        # style choice: an untyped `(start)` makes ArcadeDB scan every vertex type
+        # instead of using the UNIQUE index on entity_id. Measured at 61,901ms for
+        # a depth-2 traversal versus 35ms labelled, on the same 400-chunk tenant.
+        #
+        # The label is schema-validated before interpolation; an unrecognised one
+        # falls back to the untyped form, which is slow but still correct.
+        start_label = ""
+        if seed_label and schema.validate_vertex_label(seed_label) and is_safe_identifier(seed_label):
+            start_label = f":{seed_label}"
+
         # ArcadeDB's Cypher layer does not implement the path functions
         # `nodes(path)` / `relationships(path)`, so endpoints and the relationship
         # type are projected directly. Variable-length matching itself is supported,
         # so multi-hop traversal is unaffected.
         cypher = (
-            f"MATCH (start)-[rel{rel_fragment}*1..{safe_depth}]-(related) "
+            f"MATCH (start{start_label})-[rel{rel_fragment}*1..{safe_depth}]-(related) "
             "WHERE start.entity_id IN $start_nodes "
             "RETURN start.entity_id AS source_id, start.name AS source_name, "
             "start.entity_label AS source_label, "

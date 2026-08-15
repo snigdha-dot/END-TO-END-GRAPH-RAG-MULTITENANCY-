@@ -11,11 +11,13 @@ semantic quality it did not deliver.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import math
 import re
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from typing import List, Optional, Sequence
 
 from app.core.config import settings
@@ -24,6 +26,14 @@ from app.core.exceptions import ModelUnavailableError
 logger = logging.getLogger(__name__)
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
+
+# Shared across the embedding and reranking services: both run torch inference,
+# and a single bounded pool keeps total CPU contention predictable. Bounded
+# because unbounded threads would oversubscribe the CPU and make every request
+# slower rather than fewer requests fast.
+_INFERENCE_POOL = ThreadPoolExecutor(
+    max_workers=settings.INFERENCE_THREADS, thread_name_prefix="inference"
+)
 
 
 class EmbeddingService:
@@ -164,6 +174,31 @@ class EmbeddingService:
         except Exception as exc:  # noqa: BLE001
             logger.error("Embedding inference failed (%s); using lexical fallback.", exc)
             return [self._hash_embed(t) for t in texts]
+
+    # ------------------------------------------------------------------ async
+    async def encode_batch_async(self, texts: Sequence[str]) -> List[List[float]]:
+        """Encode off the event loop.
+
+        Transformer inference is synchronous CPU work. Called directly from an
+        async handler it blocks the loop for its whole duration, so every other
+        in-flight request stalls behind it — a request that only needed a fast
+        graph lookup waits on someone else's embedding. Running it in a worker
+        thread lets the loop keep serving.
+
+        The GIL is released inside torch's compute kernels, so threads give real
+        parallelism here rather than the illusion of it.
+        """
+        if not texts:
+            return []
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            _INFERENCE_POOL, self.encode_batch, list(texts)
+        )
+
+    async def encode_query_async(self, query: str) -> List[float]:
+        """Encode a search query off the event loop."""
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(_INFERENCE_POOL, self.encode_query, query)
 
     def encode_query(self, query: str) -> List[float]:
         """Encode a search query.

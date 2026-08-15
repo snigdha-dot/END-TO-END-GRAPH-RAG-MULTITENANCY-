@@ -31,7 +31,9 @@ from app.services.community_service import Community, community_service
 from app.services.embedding_service import embedding_service
 from app.services.extraction_router import extraction_router
 from app.services.graph_builder import GraphWriteResult, graph_builder
+from app.services.lexical_search import lexical_search_service
 from app.services.resolution_service import resolution_service
+from app.services.vector_index import vector_index_service
 
 logger = logging.getLogger(__name__)
 
@@ -184,7 +186,9 @@ class IngestionPipeline:
 
             # ------------------------------------------------------ embed
             t1 = time.perf_counter()
-            vectors = embedding_service.encode_batch([c.embedding_text() for c in window])
+            vectors = await embedding_service.encode_batch_async(
+                [c.embedding_text() for c in window]
+            )
             embed_ms += (time.perf_counter() - t1) * 1000
 
             # ------------------------------------------------------ extract
@@ -252,6 +256,12 @@ class IngestionPipeline:
                 duration_ms=extract_ms,
             )
 
+        # New chunks are invisible to a cached index, which presents as poor
+        # recall rather than as a staleness bug. Invalidate before communities so
+        # their reports are built against the current corpus.
+        vector_index_service.invalidate(ctx.tenant_id)
+        lexical_search_service.invalidate(ctx.tenant_id)
+
         # ---------------------------------------------------------- communities
         if build_communities and document_entities:
             t5 = time.perf_counter()
@@ -291,7 +301,9 @@ class IngestionPipeline:
         if not communities:
             return 0
 
-        vectors = embedding_service.encode_batch([c.report_text() for c in communities])
+        vectors = await embedding_service.encode_batch_async(
+            [c.report_text() for c in communities]
+        )
         statements = community_service.to_chunk_statements(communities, vectors)
         if statements:
             await arcadedb_client.execute_batch(statements, tenant_id=ctx.tenant_id)

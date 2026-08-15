@@ -257,11 +257,18 @@ class ArcadeDBClient:
         tenant_id: Optional[str] = None,
         language: str = "cypher",
         timeout_ms: Optional[int] = None,
+        result_limit: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """Execute a parameterized query against the bound tenant's database.
 
         `tenant_id` defaults to the contextvar bound by the auth layer, so a caller
         cannot accidentally issue an unscoped query.
+
+        `result_limit` caps rows in the response envelope. It defaults to the
+        traversal bound, which is right for traversal but wrong for a full scan:
+        a hardcoded envelope limit silently truncated every SELECT to 100 rows
+        regardless of its own LIMIT clause, so a 400-chunk tenant looked like a
+        100-chunk one and recall was measured against a quarter of the corpus.
         """
         if tenant_id is None:
             ctx = try_get_tenant_context()
@@ -279,7 +286,7 @@ class ArcadeDBClient:
                 "language": language,
                 "command": cypher_query,
                 "params": params or {},
-                "limit": settings.MAX_TRAVERSAL_NODES,
+                "limit": result_limit or settings.MAX_TRAVERSAL_NODES,
             },
             timeout_ms=timeout_ms,
         )
@@ -288,10 +295,17 @@ class ArcadeDBClient:
     async def execute_sql(
         self, sql: str, params: Optional[Dict[str, Any]] = None, *,
         tenant_id: Optional[str] = None, timeout_ms: Optional[int] = None,
+        result_limit: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
-        """Execute ArcadeDB SQL — needed for schema/index DDL, which Cypher lacks."""
+        """Execute ArcadeDB SQL — needed for schema/index DDL, which Cypher lacks.
+
+        SQL is used for full scans (index building, re-indexing), where the
+        traversal-sized envelope limit would truncate the result. The default is
+        raised accordingly; callers that want the traversal bound pass it.
+        """
         return await self.execute_cypher(
-            sql, params, tenant_id=tenant_id, language="sql", timeout_ms=timeout_ms
+            sql, params, tenant_id=tenant_id, language="sql", timeout_ms=timeout_ms,
+            result_limit=result_limit or settings.MAX_SCAN_ROWS,
         )
 
     async def execute_batch(

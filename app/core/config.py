@@ -98,6 +98,16 @@ class Settings(BaseSettings):
     DEFAULT_MAX_HOPS: int = 2
     MAX_TRAVERSAL_DEPTH: int = 3
     MAX_TRAVERSAL_NODES: int = 100
+    # Row cap for full scans (vector index builds, BM25 index builds, re-indexing).
+    # Distinct from MAX_TRAVERSAL_NODES: that bounds a traversal to keep a single
+    # query cheap, whereas a scan legitimately reads the whole corpus.
+    MAX_SCAN_ROWS: int = 50_000
+    # Bounds on the graph -> text bridge. A traversal can reach 100 entities, and
+    # fetching every chunk each appears in transfers far more than fusion can use:
+    # measured ~4s on a 400-chunk tenant, nearly all of it text that ranks below
+    # the top-k and is discarded.
+    GRAPH_CHUNK_SEED_LIMIT: int = 25
+    GRAPH_CHUNK_LIMIT: int = 30
     DEFAULT_TOP_K: int = 5
     SIMILARITY_THRESHOLD: float = 0.70
     ENTITY_LINK_SIMILARITY: float = 0.85
@@ -118,6 +128,21 @@ class Settings(BaseSettings):
     CROSS_ENCODER_LABEL: str = "ms-marco-MiniLM-L-6-v2"
     RERANKER_ENABLED: bool = True
     RERANK_CANDIDATE_MULTIPLIER: int = 4
+    # Characters of each passage the cross-encoder sees. Its cost is quadratic in
+    # sequence length, and a record chunk carrying 34 CSV columns is mostly fields
+    # the query never mentions. Measured at 237ms per full-length candidate.
+    RERANK_MAX_CHARS: int = 512
+    RERANK_BATCH_SIZE: int = 32
+    # Worker threads for model inference. Transformer forward passes are
+    # synchronous CPU work; run on the event loop they stall every concurrent
+    # request. Bounded so threads do not oversubscribe the CPU and make all
+    # requests slower instead of a few fast.
+    INFERENCE_THREADS: int = 4
+    # How long a tenant's cached vectors stay valid. Refetching every embedding
+    # over HTTP costs ~330ms per query against a 400-chunk tenant, of which only
+    # ~11ms is the scoring itself. Ingestion invalidates the cache explicitly, so
+    # this bound only covers writes made by another process.
+    VECTOR_INDEX_TTL_SECONDS: int = 300
     # Degrade to lexical scoring instead of crashing when model weights are absent.
     ALLOW_MODEL_FALLBACK: bool = True
     # Refuse to score vectors written by a different embedding model. Set false

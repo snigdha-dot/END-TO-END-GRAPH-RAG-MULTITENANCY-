@@ -12,6 +12,7 @@ too slow to run on anything but a short list.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import math
 import re
@@ -21,6 +22,9 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from app.core.config import settings
 from app.models.graph import RetrievedChunk, Subgraph, Vertex
+# Shared pool: embedding and reranking both run torch inference, and one bounded
+# pool keeps total CPU contention predictable rather than each service competing.
+from app.services.embedding_service import _INFERENCE_POOL
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +105,22 @@ class RerankerService:
         density = overlap / math.sqrt(len(d_terms)) if d_terms else 0.0
         return round((coverage * 0.75) + min(density, 1.0) * 0.25, 4)
 
+    async def rerank_chunks_async(
+        self, query: str, chunks: List[RetrievedChunk], top_k: int
+    ) -> List[RetrievedChunk]:
+        """Rerank off the event loop.
+
+        Cross-encoder scoring is one forward pass per candidate, so it is the
+        heaviest synchronous step in retrieval. Run on the loop it blocks every
+        concurrent request for its whole duration.
+        """
+        if not chunks:
+            return []
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            _INFERENCE_POOL, self.rerank_chunks, query, chunks, top_k
+        )
+
     def rerank_chunks(
         self, query: str, chunks: List[RetrievedChunk], top_k: int
     ) -> List[RetrievedChunk]:
@@ -110,12 +130,22 @@ class RerankerService:
 
         self._load_cross_encoder()
         # Bound cross-encoder work: it is O(n) model calls.
-        candidates = chunks[: max(top_k * 4, 20)]
+        candidates = chunks[: max(top_k * settings.RERANK_CANDIDATE_MULTIPLIER, 20)]
 
         if self._cross_encoder is not None:
             try:
-                pairs = [(query, c.text) for c in candidates]
-                raw = self._cross_encoder.predict(pairs)
+                # Truncate each passage before scoring. A cross-encoder's cost is
+                # quadratic in sequence length, and a record chunk carrying 34 CSV
+                # columns is mostly fields the query never mentions. Measured at
+                # 237ms per full-length candidate versus a few ms truncated, for
+                # ranking that barely moves: relevance is decided by the opening
+                # of a passage far more than its tail.
+                pairs = [
+                    (query, c.text[: settings.RERANK_MAX_CHARS]) for c in candidates
+                ]
+                raw = self._cross_encoder.predict(
+                    pairs, batch_size=settings.RERANK_BATCH_SIZE, show_progress_bar=False
+                )
                 for chunk, score in zip(candidates, raw):
                     # Squash logits into (0,1) so scores are comparable across queries.
                     chunk.score = round(1.0 / (1.0 + math.exp(-float(score))), 4)

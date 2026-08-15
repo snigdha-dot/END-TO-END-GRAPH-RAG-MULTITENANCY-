@@ -21,6 +21,7 @@ from app.core.tenant_context import TenantContext, tenant_scope
 from app.services.arcadedb_client import arcadedb_client
 from app.services.embedding_service import embedding_service
 from app.services.lexical_search import lexical_search_service
+from app.services.vector_index import vector_index_service
 
 BATCH = 64
 
@@ -87,7 +88,9 @@ async def reindex_tenant(tenant_id: str) -> Dict[str, Any]:
 
         print(f"    {min(start + BATCH, len(chunks))}/{len(chunks)} chunks re-embedded")
 
-    # The BM25 index caches chunk text; a re-index invalidates that assumption.
+    # Both caches hold data this re-index just replaced: the vector index holds
+    # the old embeddings, and BM25 holds chunk text.
+    vector_index_service.invalidate(tenant_id)
     lexical_search_service.invalidate(tenant_id)
 
     return {
