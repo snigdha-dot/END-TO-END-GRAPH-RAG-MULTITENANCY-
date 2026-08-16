@@ -42,7 +42,16 @@ class Settings(BaseSettings):
     # Measured: 16 concurrent writers overwhelmed a single-node ArcadeDB and it
     # returned 503. 6 keeps it responsive while still overlapping most of the
     # round-trip latency.
-    ARCADEDB_WRITE_CONCURRENCY: int = 6
+    # Concurrent writers deadlock on ArcadeDB's per-bucket file locks: six writers
+    # against the same Chunk bucket produced "Timeout on locking file ... during
+    # commit" and hung the server for every tenant, not just the one ingesting.
+    # Writes to a single tenant are inherently contended, so the parallelism that
+    # helps reads is a liability here.
+    ARCADEDB_WRITE_CONCURRENCY: int = 2
+    # Retries for a contended write, with exponential backoff. Lock contention
+    # resolves once the holding transaction commits, so waiting is the correct
+    # response; failing would leave a partially-written document.
+    ARCADEDB_WRITE_RETRIES: int = 3
     # Entities per chunk. Real prose yields long tails of low-confidence mentions
     # that add writes without adding retrievable signal.
     MAX_ENTITIES_PER_CHUNK: int = 25

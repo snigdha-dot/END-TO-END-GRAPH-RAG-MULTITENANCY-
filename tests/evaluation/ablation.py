@@ -225,9 +225,17 @@ class AblationRunner:
                     analysis, case.tenant, query_vector
                 )
                 seed_ids = [e.entity_id for e in linked]
+                # Group seeds by label so each traversal names its start type and
+                # uses the UNIQUE index. Without it a depth-2 walk scans every
+                # vertex type and times out, which would show up as "the graph
+                # path retrieves nothing" rather than as the query bug it is.
+                seed_groups: Dict[str, List[str]] = {}
+                for entity in linked:
+                    seed_groups.setdefault(entity.label or "", []).append(entity.entity_id)
                 if seed_ids:
                     subgraph, graph_chunks = await retrieval_pipeline._graph_search(  # noqa: SLF001
-                        seed_ids, case.tenant, ctx, ctx.schema, 2
+                        seed_ids, case.tenant, ctx, ctx.schema, 2,
+                        seed_labels=seed_groups,
                     )
                 stages["graph_ms"] = (time.perf_counter() - started) * 1000
 
@@ -263,7 +271,9 @@ class AblationRunner:
 
         if config.use_reranker and combined:
             started = time.perf_counter()
-            combined = reranker_service.rerank_chunks(case.query, combined, self.top_k)
+            combined = await reranker_service.rerank_chunks_async(
+                case.query, combined, self.top_k
+            )
             stages["rerank_ms"] = (time.perf_counter() - started) * 1000
 
         return combined[: self.top_k], subgraph, stages, len(vector_chunks)

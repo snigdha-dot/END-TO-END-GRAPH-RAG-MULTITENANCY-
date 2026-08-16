@@ -404,22 +404,27 @@ class ArcadeDBClient:
                     )
                     return True
                 except DatabaseConnectionError as exc:
-                    # A single-node server under write pressure returns 503. That is
-                    # back-pressure, not a dead database, so back off and retry once
-                    # before treating it as fatal.
-                    await asyncio.sleep(0.5)
-                    try:
-                        await self.execute_cypher(
-                            stmt["command"],
-                            stmt.get("params", {}),
-                            tenant_id=tenant_id,
-                            language=language,
-                            timeout_ms=settings.ARCADEDB_WRITE_TIMEOUT_MS,
-                        )
-                        return True
-                    except (DatabaseQueryError, DatabaseConnectionError) as retry_exc:
-                        failures.append(retry_exc)
-                        return False
+                    # Two distinct conditions arrive here and both are transient:
+                    # a 503 is back-pressure from a single-node server, and a
+                    # bucket-lock timeout is two writers contending for the same
+                    # file during commit. Neither means the database is gone, so
+                    # back off with increasing delay rather than failing.
+                    last_exc: Exception = exc
+                    for attempt in range(settings.ARCADEDB_WRITE_RETRIES):
+                        await asyncio.sleep(0.5 * (2**attempt))
+                        try:
+                            await self.execute_cypher(
+                                stmt["command"],
+                                stmt.get("params", {}),
+                                tenant_id=tenant_id,
+                                language=language,
+                                timeout_ms=settings.ARCADEDB_WRITE_TIMEOUT_MS,
+                            )
+                            return True
+                        except (DatabaseQueryError, DatabaseConnectionError) as retry_exc:
+                            last_exc = retry_exc
+                    failures.append(last_exc)
+                    return False
                 except DatabaseQueryError as exc:
                     failures.append(exc)
                     return False

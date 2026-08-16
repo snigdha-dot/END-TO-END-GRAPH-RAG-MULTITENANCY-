@@ -75,7 +75,14 @@ class GraphSchemaService:
         statements: List[tuple[str, str]] = []
         dim = settings.EMBEDDING_DIMENSIONS
 
-        for label in sorted(schema.vertex_labels):
+        # Chunk is infrastructure, not a domain entity: it carries text and a
+        # vector, never an entity_id. Giving it the entity index would create a
+        # UNIQUE constraint over a column that is null in every row, which
+        # ArcadeDB then refuses to index a second time - so the chunk_id index
+        # fails and provisioning aborts. Its own properties are defined below.
+        entity_labels = sorted(schema.vertex_labels - {"Chunk"})
+
+        for label in entity_labels:
             self._assert_identifier(label, "vertex label")
             # Entity identity and lookup properties.
             statements.append(

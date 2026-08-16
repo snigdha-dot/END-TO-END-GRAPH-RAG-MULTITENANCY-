@@ -192,6 +192,21 @@ class TenantSchemaRegistry:
         for schema in (MOVIES_SCHEMA, AI_TRENDS_SCHEMA):
             self._schemas[schema.tenant_id] = schema
 
+        # The TMDB evaluation tenant shares the film vocabulary. Registering it
+        # here rather than letting it fall back to the generic schema is what
+        # lets extraction produce DIRECTED and ACTED_IN edges: the generic verb
+        # set has no "directed" or "starred in", so a film corpus under it yields
+        # entities with almost no relations between them.
+        self._schemas["tmdb_films"] = TenantGraphSchema(
+            tenant_id="tmdb_films",
+            display_name="TMDB Film Knowledge Base",
+            domain=MOVIES_SCHEMA.domain,
+            vertex_labels=set(MOVIES_SCHEMA.vertex_labels),
+            edge_types=set(MOVIES_SCHEMA.edge_types),
+            ner_labels=list(MOVIES_SCHEMA.ner_labels),
+            default_traversal_edges=list(MOVIES_SCHEMA.default_traversal_edges),
+        )
+
     def register(self, schema: TenantGraphSchema) -> None:
         self._schemas[schema.tenant_id] = schema
 
