@@ -81,6 +81,12 @@ class EdgeCaseQuery:
     expects_clarification: bool = False
     conversation_context: List[str] = field(default_factory=list)
 
+    # Marks a query whose answer spans records. Graph lift is computed over these
+    # specifically: a lift averaged across single-hop questions would be diluted
+    # by cases the graph was never meant to help.
+    requires_multi_hop: bool = False
+    hops: int = 1
+
     @property
     def is_security(self) -> bool:
         return self.category in (Category.ISOLATION, Category.ADVERSARIAL)

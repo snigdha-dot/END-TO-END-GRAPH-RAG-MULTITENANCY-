@@ -174,6 +174,13 @@ async def main() -> int:
     parser.add_argument("--configs", help="Comma-separated config keys, e.g. A,E,H")
     parser.add_argument("--limit", type=int, help="Cap queries per configuration")
     parser.add_argument("--out", default="reports", help="Output directory")
+    parser.add_argument(
+        "--dataset",
+        choices=["ayurveda", "tmdb"],
+        default="ayurveda",
+        help="Which query set to run. 'tmdb' is the relational corpus where the "
+             "graph has cross-document structure to traverse.",
+    )
     args = parser.parse_args()
 
     configs = list(ABLATION_CONFIGS)
@@ -184,7 +191,14 @@ async def main() -> int:
     # Only queries with IR ground truth take part: an abstention case has no
     # relevant chunk, so including it would drag every configuration's recall
     # toward the same meaningless number.
-    cases = [q for q in ALL_QUERIES if q.has_ground_truth and q.rule is not PassRule.CLARIFIES]
+    if args.dataset == "tmdb":
+        from tests.evaluation.tmdb_dataset import TMDB_QUERIES  # noqa: PLC0415
+
+        source = TMDB_QUERIES
+    else:
+        source = ALL_QUERIES
+
+    cases = [q for q in source if q.has_ground_truth and q.rule is not PassRule.CLARIFIES]
     if args.limit:
         cases = cases[: args.limit]
 
